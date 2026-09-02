@@ -61,9 +61,126 @@ write.csv(validation_set, "validation.csv")
 ```
 
 
-#Aylas work
+## Aylas work
+## Load Libraries
+
+```{r}
+# Load the necessary libraries
+library(pROC)
+library(smotefamily)
+library(caret) # for regression
+library(ggplot2)
+library(corrplot)
+library(tidyverse)
+library(dplyr)
+library(randomForest)
+library(FSelector)  # for Gain Ratio but not working so computed it manually instead
+```
+
+## Load the data
+
+```{r}
+# Load the dataset
+lung_cancer <- read.csv("survey lung cancer.csv")
+
+head(lung_cancer)
+```
+
+## Data Cleaning
+
+```{r}
+# Convert binary variables (1= No, 2 = Yes) to 0/1
+binary_vars <- c("SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING","SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
+
+lung_cancer[binary_vars] <- lapply(lung_cancer[binary_vars], function(x) ifelse(x == 2, 1, 0))
+
+# Convert gender to binary(M = 1, F = 0)
+lung_cancer$GENDER <- ifelse(lung_cancer$GENDER == "M", 1, 0)
+
+# Convert Lunge cancer into binary (YES = 1,  N0 = 0)
+
+lung_cancer$LUNG_CANCER <- ifelse(lung_cancer$LUNG_CANCER == "YES", 1, 0)
+
+# Check for any missing values
+colSums(is.na(lung_cancer))
 
 
+# check the structure of the data
+str(lung_cancer)
+```
 
+## Exploratory Data Analysis
+
+```{r}
+
+# Summarry statistics
+summary(lung_cancer)
+
+# Proportion of lung cancer
+prop.table(table(lung_cancer$LUNG_CANCER)) # (Class imbalance)
+```
+
+## 3.2 Data Preprocessing: SMOTE Class Balancing (50-50)
+```{r}
+# Build predictors (exclude target only - no AGE_GROUP added yet)
+predictors <- lung_cancer %>% select(-LUNG_CANCER)
+target <- lung_cancer$LUNG_CANCER
+
+# Confirm all predictors are numeric with no missing values
+str(predictors)
+colSums(is.na(predictors))
+
+# Apply SMOTE (5-NN, as described in the paper) to oversample
+# the minority class (Non-Lung Cancer = 0) to 50-50 balance
+set.seed(123)  # for reproducibility
+smote_result <- SMOTE(X = predictors, target = target, K = 5, dup_size = 0)
+
+# Extract the balanced dataset
+lung_cancer_balanced <- smote_result$data
+names(lung_cancer_balanced)[ncol(lung_cancer_balanced)] <- "LUNG_CANCER"
+lung_cancer_balanced$LUNG_CANCER <- as.numeric(as.character(lung_cancer_balanced$LUNG_CANCER))
+
+# Check the new balanced distribution (should be ~50/50)
+table(lung_cancer_balanced$LUNG_CANCER)
+prop.table(table(lung_cancer_balanced$LUNG_CANCER))
+```
+
+## 3.3 Features Analysis: Age Distribution on Balanced Data
+
+```{r}
+# Create age groups matching 5-year bins
+# Widen lower bound to avoid NA bin from any outlier ages
+lung_cancer_balanced <- lung_cancer_balanced %>%
+  mutate(AGE_GROUP = cut(AGE,
+                          breaks = c(-Inf, 39, 44, 49, 54, 59, 64, 69, 74, 79, 84, Inf),
+                          labels = c("35 -- 39", "40 -- 44", "45 -- 49", "50 -- 54",
+                                     "55 -- 59", "60 -- 64", "65 -- 69", "70 -- 74",
+                                     "75 -- 79", "80 -- 84", "85+"),
+                          right = TRUE))
+
+# Confirm no NAs remain
+sum(is.na(lung_cancer_balanced$AGE_GROUP))
+
+# Calculate percentage as share of the WHOLE balanced dataset (not within-group)
+age_group_pct <- lung_cancer_balanced %>%
+  count(LUNG_CANCER, AGE_GROUP, .drop = FALSE) %>%
+  mutate(pct = n / sum(n)) %>%   # denominator = total rows in balanced data
+  mutate(LUNG_CANCER = factor(LUNG_CANCER, levels = c(0, 1), labels = c("No", "Yes")))
+
+# Plot: grouped bar chart with percentages (matches paper's Figure 1)
+ggplot(age_group_pct, aes(x = AGE_GROUP, y = pct, fill = LUNG_CANCER)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.01),
+                      limits = c(0, 0.18)) +
+  scale_fill_manual(values = c("No" = "#4472C4", "Yes" = "#ED7D31")) +
+  labs(title = "Lung Cancer", 
+       x = "Age group", y = "Lung cancer", fill = "LUNG_CANCER") +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(size = 10),
+        legend.position = "top",
+        legend.justification = "right")
+```
 
 
