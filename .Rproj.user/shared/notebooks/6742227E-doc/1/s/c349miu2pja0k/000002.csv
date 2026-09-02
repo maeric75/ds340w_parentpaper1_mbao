@@ -1,0 +1,20 @@
+"1","
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc3BsaXQgPC0gaW5pdGlhbF92YWxpZGF0aW9uX3NwbGl0KGRhdGEsIHByb3A9YygwLjcsIDAuMSkpXG5cbnRyYWluX3NldCA8LSB0cmFpbmluZyhzcGxpdClcbnRlc3Rfc2V0IDwtIHRlc3Rpbmcoc3BsaXQpXG52YWxpZGF0aW9uX3NldCA8LSB2YWxpZGF0aW9uKHNwbGl0KVxuYGBgIn0= -->
+
+```r
+split <- initial_validation_split(data, prop=c(0.7, 0.1))
+
+train_set <- training(split)
+test_set <- testing(split)
+validation_set <- validation(split)
+```
+
+<!-- rnb-source-end -->
+"
+"0","```r
+split <- initial_validation_split(data, prop=c(0.7, 0.1))
+
+train_set <- training(split)
+test_set <- testing(split)
+validation_set <- validation(split)
+```"

@@ -1,0 +1,61 @@
+---
+title: "Parent Paper 1: Data Split"
+output: html_notebook
+---
+
+TEST FOR GITHUB REPO
+
+DS 340W: Fall 2026
+Maeric Barrows & Ayla Orona
+
+This is documentation for processes performed for Parent Paper 1.
+
+# 0. Load Data and Packages
+
+```{r}
+remove(list=ls())
+
+library(dplyr)
+library(tidyverse)
+
+library(rsample) # Data split
+library(pROC) # ROC curves
+library(smotefamily) # SMOTE
+library(caret) # Regression
+library(ggplot2)
+library(corrplot)
+
+data <- read.csv("parentpaper1_data.csv")
+```
+
+# 1. Training/Testing/Validation Split
+
+```{r Data Cleaning}
+# Convert binary variables (1= No, 2 = Yes) to 0/1
+binary_vars <- c("SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING","SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
+
+data[binary_vars] <- lapply(data[binary_vars], function(x) ifelse(x == 2, 1, 0))
+
+# Convert gender to binary(M = 1, F = 0)
+data$GENDER <- ifelse(data$GENDER == "M", 1, 0)
+
+# Convert Lunge cancer into binary (YES = 1,  N0 = 0)
+
+data$LUNG_CANCER <- ifelse(data$LUNG_CANCER == "YES", 1, 0)
+```
+
+
+```{r Data Split}
+split <- initial_validation_split(data, prop=c(0.7, 0.1))
+
+train_set <- training(split)
+test_set <- testing(split)
+validation_set <- validation(split)
+```
+
+```{r}
+# For submission
+write.csv(train_set, "training.csv")
+write.csv(test_set, "testing.csv")
+write.csv(validation_set, "validation.csv")
+```
