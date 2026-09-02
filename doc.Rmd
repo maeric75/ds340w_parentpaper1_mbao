@@ -64,6 +64,7 @@ write.csv(validation_set, "validation.csv")
 ## Aylas work
 ## Load Libraries
 
+
 ```{r}
 # Load the necessary libraries
 library(pROC)
@@ -74,7 +75,8 @@ library(corrplot)
 library(tidyverse)
 library(dplyr)
 library(randomForest)
-library(FSelector)  # for Gain Ratio but not working so computed it manually instead
+#library(FSelector)  # for Gain Ratio but not working so computed it manually instead
+library(themis)
 ```
 
 ## Load the data
@@ -122,27 +124,61 @@ prop.table(table(lung_cancer$LUNG_CANCER)) # (Class imbalance)
 
 ## 3.2 Data Preprocessing: SMOTE Class Balancing (50-50)
 ```{r}
-# Build predictors (exclude target only - no AGE_GROUP added yet)
-predictors <- lung_cancer %>% select(-LUNG_CANCER)
-target <- lung_cancer$LUNG_CANCER
+# ============================================================
+# 3.2 Data Preprocessing: SMOTE Class Balancing (50-50)
+# ============================================================
 
-# Confirm all predictors are numeric with no missing values
-str(predictors)
-colSums(is.na(predictors))
 
-# Apply SMOTE (5-NN, as described in the paper) to oversample
-# the minority class (Non-Lung Cancer = 0) to 50-50 balance
-set.seed(123)  # for reproducibility
-smote_result <- SMOTE(X = predictors, target = target, K = 5, dup_size = 0)
+# Convert categorical predictors to factors
+# AGE remains numeric
+smote_data <- lung_cancer %>%
+  mutate(
+    GENDER = as.factor(GENDER),
+    SMOKING = as.factor(SMOKING),
+    YELLOW_FINGERS = as.factor(YELLOW_FINGERS),
+    ANXIETY = as.factor(ANXIETY),
+    PEER_PRESSURE = as.factor(PEER_PRESSURE),
+    CHRONIC.DISEASE = as.factor(CHRONIC.DISEASE),
+    FATIGUE = as.factor(FATIGUE),
+    ALLERGY = as.factor(ALLERGY),
+    WHEEZING = as.factor(WHEEZING),
+    ALCOHOL.CONSUMING = as.factor(ALCOHOL.CONSUMING),
+    COUGHING = as.factor(COUGHING),
+    SHORTNESS.OF.BREATH = as.factor(SHORTNESS.OF.BREATH),
+    SWALLOWING.DIFFICULTY = as.factor(SWALLOWING.DIFFICULTY),
+    CHEST.PAIN = as.factor(CHEST.PAIN),
+    LUNG_CANCER = as.factor(LUNG_CANCER)
+  )
 
-# Extract the balanced dataset
-lung_cancer_balanced <- smote_result$data
-names(lung_cancer_balanced)[ncol(lung_cancer_balanced)] <- "LUNG_CANCER"
-lung_cancer_balanced$LUNG_CANCER <- as.numeric(as.character(lung_cancer_balanced$LUNG_CANCER))
+# Check original class distribution
+table(smote_data$LUNG_CANCER)
 
-# Check the new balanced distribution (should be ~50/50)
+
+# ============================================================
+# Apply SMOTENC
+# ============================================================
+
+set.seed(123)
+
+lung_cancer_balanced <- smotenc(
+  smote_data,
+  var = "LUNG_CANCER",
+  k = 5,
+  over_ratio = 1
+)
+
+
+# ============================================================
+# Check balanced dataset
+# ============================================================
+
 table(lung_cancer_balanced$LUNG_CANCER)
+
 prop.table(table(lung_cancer_balanced$LUNG_CANCER))
+
+dim(lung_cancer_balanced)
+
+str(lung_cancer_balanced)
 ```
 
 ## 3.3 Features Analysis: Age Distribution on Balanced Data
@@ -184,3 +220,107 @@ ggplot(age_group_pct, aes(x = AGE_GROUP, y = pct, fill = LUNG_CANCER)) +
 ```
 
 
+## 3.3 Features Analysis: Feature Ranking (Table 1)
+
+```{r}
+# ============================================================
+# Random Forest Feature Importance (Gini-based)
+# ============================================================
+
+ranking_data <- lung_cancer_balanced
+
+set.seed(123)
+
+rf_model <- randomForest(
+  LUNG_CANCER ~ .,
+  data = ranking_data,
+  importance = TRUE,
+  ntree = 500
+)
+
+rf_importance <- importance(rf_model, type = 2) %>%
+  as.data.frame() %>%
+  rownames_to_column("Feature") %>%
+  rename(RF_Ranking = MeanDecreaseGini) %>%
+  arrange(desc(RF_Ranking))
+
+rf_importance
+```
+
+```{r}
+# ============================================================
+# Manual Gain Ratio calculation (no Java/FSelector dependency needed)
+# Formula: GR(fi) = [H(c) - H(c|fi)] / H(fi)
+# ============================================================
+
+# Entropy function: H(X) = -sum(p * log2(p))
+entropy <- function(x) {
+  probs <- table(x) / length(x)
+  probs <- probs[probs > 0]  # avoid log(0)
+  -sum(probs * log2(probs))
+}
+
+# Conditional entropy function: H(c|f) = sum over f's values of P(f=v) * H(c | f=v)
+conditional_entropy <- function(class_var, feature_var) {
+  levels_f <- unique(feature_var)
+  total_n <- length(feature_var)
+  
+  cond_h <- 0
+  for (v in levels_f) {
+    subset_class <- class_var[feature_var == v]
+    weight <- length(subset_class) / total_n
+    cond_h <- cond_h + weight * entropy(subset_class)
+  }
+  return(cond_h)
+}# Gain Ratio function for one feature
+gain_ratio_single <- function(class_var, feature_var) {
+  h_c <- entropy(class_var)
+  h_c_given_f <- conditional_entropy(class_var, feature_var)
+  h_f <- entropy(feature_var)
+  
+  info_gain <- h_c - h_c_given_f
+  
+  # Avoid divide-by-zero if feature has only 1 unique value
+  if (h_f == 0) return(0)
+  
+  gr <- info_gain / h_f
+  return(gr)
+}
+```
+
+
+```{r}
+# ============================================================
+# Apply Gain Ratio to all features
+# ============================================================
+
+feature_names <- setdiff(names(ranking_data), "LUNG_CANCER")
+class_var <- ranking_data$LUNG_CANCER
+
+gr_scores <- sapply(feature_names, function(f) {
+  gain_ratio_single(class_var, ranking_data[[f]])
+})
+
+gain_ratio_result <- data.frame(
+  Feature = names(gr_scores),
+  GR_Ranking = round(as.numeric(gr_scores), 4)
+) %>%
+  arrange(desc(GR_Ranking))
+
+gain_ratio_result
+```
+
+```{r}
+# ============================================================
+# Combine into Table 1 format (Random Forest | Gain Ratio side by side)
+# ============================================================
+
+table1 <- data.frame(
+  RF_Feature = rf_importance$Feature,
+  RF_Ranking = round(rf_importance$RF_Ranking, 4),
+  GR_Feature = gain_ratio_result$Feature,
+  GR_Ranking = gain_ratio_result$GR_Ranking
+)
+
+table1
+```
