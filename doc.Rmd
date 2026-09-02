@@ -59,3 +59,11 @@ write.csv(train_set, "training.csv")
 write.csv(test_set, "testing.csv")
 write.csv(validation_set, "validation.csv")
 ```
+
+
+#Aylas work
+
+
+
+
+
