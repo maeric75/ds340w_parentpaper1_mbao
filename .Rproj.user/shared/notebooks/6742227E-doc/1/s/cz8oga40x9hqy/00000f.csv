@@ -1,0 +1,7 @@
+"0","set.seed(123)"
+"0",""
+"0","split <- initial_validation_split(lung_cancer_balanced, prop=c(0.7, 0.1))"
+"0",""
+"0","train_set <- training(split)"
+"0","test_set <- testing(split)"
+"0","validation_set <- validation(split)"

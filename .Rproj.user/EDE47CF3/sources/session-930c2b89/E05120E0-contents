@@ -10,43 +10,283 @@ Maeric Barrows & Ayla Orona
 
 This is documentation for processes performed for Parent Paper 1.
 
-# 0. Load Data and Packages
+## Aylas work
+
+## 0. Load Libraries
 
 ```{r}
 remove(list=ls())
 
-library(dplyr)
-library(tidyverse)
-
-library(rsample) # Data split
-library(pROC) # ROC curves
-library(smotefamily) # SMOTE
-library(caret) # Regression
+# Load the necessary libraries
+library(pROC)
+library(smotefamily)
+library(caret) # for regression
 library(ggplot2)
 library(corrplot)
-
-data <- read.csv("parentpaper1_data.csv")
+library(tidyverse)
+library(dplyr)
+library(randomForest)
+#library(FSelector)  # for Gain Ratio but not working so computed it manually instead
+library(themis)
+library(rsample) # Data split
 ```
 
-# 1. Training/Testing/Validation Split
+# Load the data
 
-```{r Data Cleaning}
+```{r}
+# Load the dataset
+lung_cancer <- read.csv("survey lung cancer.csv")
+
+head(lung_cancer)
+```
+
+## Data Cleaning
+
+```{r}
 # Convert binary variables (1= No, 2 = Yes) to 0/1
 binary_vars <- c("SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING","SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
 
-data[binary_vars] <- lapply(data[binary_vars], function(x) ifelse(x == 2, 1, 0))
+lung_cancer[binary_vars] <- lapply(lung_cancer[binary_vars], function(x) ifelse(x == 2, 1, 0))
 
 # Convert gender to binary(M = 1, F = 0)
-data$GENDER <- ifelse(data$GENDER == "M", 1, 0)
+lung_cancer$GENDER <- ifelse(lung_cancer$GENDER == "M", 1, 0)
 
 # Convert Lunge cancer into binary (YES = 1,  N0 = 0)
 
-data$LUNG_CANCER <- ifelse(data$LUNG_CANCER == "YES", 1, 0)
+lung_cancer$LUNG_CANCER <- ifelse(lung_cancer$LUNG_CANCER == "YES", 1, 0)
+
+# Check for any missing values
+colSums(is.na(lung_cancer))
+
+
+# check the structure of the data
+str(lung_cancer)
+```
+
+## Exploratory Data Analysis
+
+```{r}
+
+# Summarry statistics
+summary(lung_cancer)
+
+# Proportion of lung cancer
+prop.table(table(lung_cancer$LUNG_CANCER)) # (Class imbalance)
+```
+
+## 3.2 Data Preprocessing: SMOTE Class Balancing (50-50)
+```{r}
+# ============================================================
+# 3.2 Data Preprocessing: SMOTE Class Balancing (50-50)
+# ============================================================
+
+
+# Convert categorical predictors to factors
+# AGE remains numeric
+smote_data <- lung_cancer %>%
+  mutate(
+    GENDER = as.factor(GENDER),
+    SMOKING = as.factor(SMOKING),
+    YELLOW_FINGERS = as.factor(YELLOW_FINGERS),
+    ANXIETY = as.factor(ANXIETY),
+    PEER_PRESSURE = as.factor(PEER_PRESSURE),
+    CHRONIC.DISEASE = as.factor(CHRONIC.DISEASE),
+    FATIGUE = as.factor(FATIGUE),
+    ALLERGY = as.factor(ALLERGY),
+    WHEEZING = as.factor(WHEEZING),
+    ALCOHOL.CONSUMING = as.factor(ALCOHOL.CONSUMING),
+    COUGHING = as.factor(COUGHING),
+    SHORTNESS.OF.BREATH = as.factor(SHORTNESS.OF.BREATH),
+    SWALLOWING.DIFFICULTY = as.factor(SWALLOWING.DIFFICULTY),
+    CHEST.PAIN = as.factor(CHEST.PAIN),
+    LUNG_CANCER = as.factor(LUNG_CANCER)
+  )
+
+# Check original class distribution
+table(smote_data$LUNG_CANCER)
+
+
+# ============================================================
+# Apply SMOTENC
+# ============================================================
+
+set.seed(123)
+
+lung_cancer_balanced <- smotenc(
+  smote_data,
+  var = "LUNG_CANCER",
+  k = 5,
+  over_ratio = 1
+)
+
+
+# ============================================================
+# Check balanced dataset
+# ============================================================
+
+table(lung_cancer_balanced$LUNG_CANCER)
+
+prop.table(table(lung_cancer_balanced$LUNG_CANCER))
+
+dim(lung_cancer_balanced)
+
+str(lung_cancer_balanced)
+```
+
+## 3.3 Features Analysis: Age Distribution on Balanced Data
+
+```{r}
+# Create age groups matching 5-year bins
+# Widen lower bound to avoid NA bin from any outlier ages
+lung_cancer_balanced <- lung_cancer_balanced %>%
+  mutate(AGE_GROUP = cut(AGE,
+                          breaks = c(-Inf, 39, 44, 49, 54, 59, 64, 69, 74, 79, 84, Inf),
+                          labels = c("35 -- 39", "40 -- 44", "45 -- 49", "50 -- 54",
+                                     "55 -- 59", "60 -- 64", "65 -- 69", "70 -- 74",
+                                     "75 -- 79", "80 -- 84", "85+"),
+                          right = TRUE))
+
+# Confirm no NAs remain
+sum(is.na(lung_cancer_balanced$AGE_GROUP))
+
+# Calculate percentage as share of the WHOLE balanced dataset (not within-group)
+age_group_pct <- lung_cancer_balanced %>%
+  count(LUNG_CANCER, AGE_GROUP, .drop = FALSE) %>%
+  mutate(pct = n / sum(n)) %>%   # denominator = total rows in balanced data
+  mutate(LUNG_CANCER = factor(LUNG_CANCER, levels = c(0, 1), labels = c("No", "Yes")))
+
+# Plot: grouped bar chart with percentages (matches paper's Figure 1)
+ggplot(age_group_pct, aes(x = AGE_GROUP, y = pct, fill = LUNG_CANCER)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.01),
+                      limits = c(0, 0.2)) +
+  scale_fill_manual(values = c("No" = "#4472C4", "Yes" = "#ED7D31")) +
+  labs(title = "Lung Cancer", 
+       x = "Age group", y = "Lung cancer", fill = "LUNG_CANCER") +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(size = 10),
+        legend.position = "top",
+        legend.justification = "right")
 ```
 
 
+## 3.3 Features Analysis: Feature Ranking (Table 1)
+
+```{r}
+# ============================================================
+# Random Forest Feature Importance (Gini-based)
+# ============================================================
+
+ranking_data <- lung_cancer_balanced
+
+set.seed(123)
+
+rf_model <- randomForest(
+  LUNG_CANCER ~ .,
+  data = ranking_data,
+  importance = TRUE,
+  ntree = 500
+)
+
+rf_importance <- importance(rf_model, type = 2) %>%
+  as.data.frame() %>%
+  rownames_to_column("Feature") %>%
+  rename(RF_Ranking = MeanDecreaseGini) %>%
+  arrange(desc(RF_Ranking))
+
+rf_importance
+```
+
+```{r}
+# ============================================================
+# Manual Gain Ratio calculation (no Java/FSelector dependency needed)
+# Formula: GR(fi) = [H(c) - H(c|fi)] / H(fi)
+# ============================================================
+
+# Entropy function: H(X) = -sum(p * log2(p))
+entropy <- function(x) {
+  probs <- table(x) / length(x)
+  probs <- probs[probs > 0]  # avoid log(0)
+  -sum(probs * log2(probs))
+}
+
+# Conditional entropy function: H(c|f) = sum over f's values of P(f=v) * H(c | f=v)
+conditional_entropy <- function(class_var, feature_var) {
+  levels_f <- unique(feature_var)
+  total_n <- length(feature_var)
+  
+  cond_h <- 0
+  for (v in levels_f) {
+    subset_class <- class_var[feature_var == v]
+    weight <- length(subset_class) / total_n
+    cond_h <- cond_h + weight * entropy(subset_class)
+  }
+  return(cond_h)
+}# Gain Ratio function for one feature
+gain_ratio_single <- function(class_var, feature_var) {
+  h_c <- entropy(class_var)
+  h_c_given_f <- conditional_entropy(class_var, feature_var)
+  h_f <- entropy(feature_var)
+  
+  info_gain <- h_c - h_c_given_f
+  
+  # Avoid divide-by-zero if feature has only 1 unique value
+  if (h_f == 0) return(0)
+  
+  gr <- info_gain / h_f
+  return(gr)
+}
+```
+
+
+```{r}
+# ============================================================
+# Apply Gain Ratio to all features
+# ============================================================
+
+feature_names <- setdiff(names(ranking_data), "LUNG_CANCER")
+class_var <- ranking_data$LUNG_CANCER
+
+gr_scores <- sapply(feature_names, function(f) {
+  gain_ratio_single(class_var, ranking_data[[f]])
+})
+
+gain_ratio_result <- data.frame(
+  Feature = names(gr_scores),
+  GR_Ranking = round(as.numeric(gr_scores), 4)
+) %>%
+  arrange(desc(GR_Ranking))
+
+gain_ratio_result
+```
+
+```{r}
+# ============================================================
+# Combine into Table 1 format (Random Forest | Gain Ratio side by side)
+# ============================================================
+
+table1 <- data.frame(
+  RF_Feature = rf_importance$Feature,
+  RF_Ranking = round(rf_importance$RF_Ranking, 4),
+  GR_Feature = gain_ratio_result$Feature,
+  GR_Ranking = gain_ratio_result$GR_Ranking
+)
+
+table1
+```
+
+# Maeric continued here
+
+## 
+
+## 4.1 Experiments Setup: Data Split
+
 ```{r Data Split}
-split <- initial_validation_split(data, prop=c(0.7, 0.1))
+set.seed(123)
+
+split <- initial_validation_split(lung_cancer_balanced, prop=c(0.7, 0.1))
 
 train_set <- training(split)
 test_set <- testing(split)
@@ -59,3 +299,5 @@ write.csv(train_set, "training.csv")
 write.csv(test_set, "testing.csv")
 write.csv(validation_set, "validation.csv")
 ```
+
+## 4.1 Experiments Setup: Creating ML Models
