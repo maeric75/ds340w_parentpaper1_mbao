@@ -10,62 +10,13 @@ Maeric Barrows & Ayla Orona
 
 This is documentation for processes performed for Parent Paper 1.
 
-# 0. Load Data and Packages
+## Aylas work
+
+## 0. Load Libraries
 
 ```{r}
 remove(list=ls())
 
-library(dplyr)
-library(tidyverse)
-
-library(rsample) # Data split
-library(pROC) # ROC curves
-library(smotefamily) # SMOTE
-library(caret) # Regression
-library(ggplot2)
-library(corrplot)
-
-data <- read.csv("parentpaper1_data.csv")
-```
-
-# 1. Training/Testing/Validation Split
-
-```{r Data Cleaning}
-# Convert binary variables (1= No, 2 = Yes) to 0/1
-binary_vars <- c("SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING","SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
-
-data[binary_vars] <- lapply(data[binary_vars], function(x) ifelse(x == 2, 1, 0))
-
-# Convert gender to binary(M = 1, F = 0)
-data$GENDER <- ifelse(data$GENDER == "M", 1, 0)
-
-# Convert Lunge cancer into binary (YES = 1,  N0 = 0)
-
-data$LUNG_CANCER <- ifelse(data$LUNG_CANCER == "YES", 1, 0)
-```
-
-
-```{r Data Split}
-split <- initial_validation_split(data, prop=c(0.7, 0.1))
-
-train_set <- training(split)
-test_set <- testing(split)
-validation_set <- validation(split)
-```
-
-```{r}
-# For submission
-write.csv(train_set, "training.csv")
-write.csv(test_set, "testing.csv")
-write.csv(validation_set, "validation.csv")
-```
-
-
-## Aylas work
-## Load Libraries
-
-
-```{r}
 # Load the necessary libraries
 library(pROC)
 library(smotefamily)
@@ -78,9 +29,11 @@ library(randomForest)
 #library(FSelector)  # for Gain Ratio but not working so computed it manually instead
 library(themis)
 library(kableExtra)
+
+library(rsample) # Data split
 ```
 
-## Load the data
+# Load the data
 
 ```{r}
 # Load the dataset
@@ -208,7 +161,7 @@ age_group_pct <- lung_cancer_balanced %>%
 ggplot(age_group_pct, aes(x = AGE_GROUP, y = pct, fill = LUNG_CANCER)) +
   geom_col(position = "dodge") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 0.01),
-                      limits = c(0, 0.18)) +
+                      limits = c(0, 0.2)) +
   scale_fill_manual(values = c("No" = "#4472C4", "Yes" = "#ED7D31")) +
   labs(title = "Lung Cancer", 
        x = "Age group", y = "Lung cancer", fill = "LUNG_CANCER") +
@@ -427,3 +380,29 @@ kable(table2_side_by_side,
 ```
 
 
+=======
+# Maeric continued here
+
+## 3.3 Features Analysis: Table 2
+
+## 4.1 Experiments Setup: Data Split
+
+```{r Data Split}
+set.seed(123)
+
+split <- initial_validation_split(lung_cancer_balanced, prop=c(0.7, 0.1))
+
+train_set <- training(split)
+test_set <- testing(split)
+validation_set <- validation(split)
+```
+
+```{r}
+# For submission
+write.csv(train_set, "training.csv")
+write.csv(test_set, "testing.csv")
+write.csv(validation_set, "validation.csv")
+```
+
+## 4.1 Experiments Setup: Creating ML Models
+>>>>>>> f13324f0d228eec53867d8f18bf0a5fe8fd5b819
