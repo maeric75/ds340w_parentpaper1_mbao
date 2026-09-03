@@ -15,20 +15,28 @@ This is documentation for processes performed for Parent Paper 1.
 ## 0. Load Libraries
 
 ```{r}
+# Clear environment
 remove(list=ls())
 
-# Load the necessary libraries
-library(pROC)
-library(smotefamily)
-library(caret) # for regression
-library(ggplot2)
-library(corrplot)
+# General
 library(tidyverse)
 library(dplyr)
-library(randomForest)
+library(kableExtra)
+library(rsample) # Data split
+library(ggplot2)
+library(corrplot)
+
+# Data Pre-processing
+library(smotefamily)
 #library(FSelector)  # for Gain Ratio but not working so computed it manually instead
 library(themis)
-library(rsample) # Data split
+
+# ML Model Packages
+library(randomForest)
+library(naivebayes)
+library(discretization) # For supervised discretization (MDLP method)
+library(caret) # for regression
+library(pROC)
 ```
 
 # Load the data
@@ -277,13 +285,116 @@ table1 <- data.frame(
 table1
 ```
 
-# Maeric continued here
 
-## 3.3 Features Analysis: Table 2
+# TABLE 2 WORK
+```{r}
+# ============================================================
+# Table 2: Feature values distribution by Lung Cancer class
+# ============================================================
+
+# List of binary features to summarize (excludes AGE - it's continuous)
+binary_features <- c("GENDER", "SMOKING", "YELLOW_FINGERS", "ANXIETY", 
+                      "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", 
+                      "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING", 
+                      "SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
+
+# Force all binary feature columns to numeric before rounding
+# (as.character first avoids the classic factor -> wrong-number bug)
+lung_cancer_balanced_rounded <- lung_cancer_balanced %>%
+  mutate(across(all_of(binary_features), 
+                ~ round(as.numeric(as.character(.)))))
+
+# Confirm it worked
+str(lung_cancer_balanced_rounded %>% select(all_of(binary_features)))
+```
+
+```{r}
+# Function: for one feature, compute % of whole dataset in each 
+# Feature-value x LUNG_CANCER combination
+feature_table2 <- function(feature_name, data) {
+  data %>%
+    count(!!sym(feature_name), LUNG_CANCER, .drop = FALSE) %>%
+    mutate(pct = n / sum(n) * 100) %>%
+    mutate(LUNG_CANCER = factor(LUNG_CANCER, levels = c(0, 1), labels = c("No", "Yes"))) %>%
+    select(!!sym(feature_name), LUNG_CANCER, pct) %>%
+    pivot_wider(names_from = LUNG_CANCER, values_from = pct) %>%
+    rename(Value = !!sym(feature_name)) %>%
+    mutate(Feature = feature_name, .before = Value)
+}
+
+# Apply to every binary feature and combine into one long table
+table2_long <- map_dfr(binary_features, ~ feature_table2(.x, lung_cancer_balanced_rounded))
+
+table2_long
+```
+
+```{r}
+# ============================================================
+# Format Value labels (0/1 -> No/Yes, or Female/Male for gender)
+# ============================================================
+
+table2_formatted <- table2_long %>%
+  mutate(Value = case_when(
+    Feature == "GENDER" & Value == 0 ~ "Female",
+    Feature == "GENDER" & Value == 1 ~ "Male",
+    Value == 0 ~ "No",
+    Value == 1 ~ "Yes",
+    TRUE ~ as.character(Value)
+  )) %>%
+  mutate(No = round(No, 2), Yes = round(Yes, 2))
+
+table2_formatted
+```
+
+```{r}
+# ============================================================
+# Display as a clean kable table (long format, one feature block at a time)
+# ============================================================
+
+kable(table2_formatted, 
+      col.names = c("Feature", "Value", "No", "Yes"),
+      caption = "Table 2. The distribution of participants in terms of feature values and class label in the balanced data.",
+      align = "c") %>%
+  kable_styling(full_width = FALSE) %>%
+  collapse_rows(columns = 1, valign = "top")
+```
+
+```{r}
+# ============================================================
+# Optional: side-by-side two-column layout like the paper 
+# (splits features into two halves, binds them next to each other)
+# ============================================================
+
+features_left <- binary_features[1:7]
+features_right <- binary_features[8:14]
+
+table2_left <- table2_formatted %>% filter(Feature %in% features_left)
+table2_right <- table2_formatted %>% filter(Feature %in% features_right)
+
+# Bind side by side (row counts match since each feature has 2 rows: No/Yes value)
+table2_side_by_side <- bind_cols(
+  table2_left %>% rename(Feature_L = Feature, Value_L = Value, No_L = No, Yes_L = Yes),
+  table2_right %>% rename(Feature_R = Feature, Value_R = Value, No_R = No, Yes_R = Yes)
+)
+
+kable(table2_side_by_side,
+      col.names = c("Feature", "Value", "No", "Yes", "Feature", "Value", "No", "Yes"),
+      caption = "Table 2. The distribution of participants in terms of feature values and class label in the balanced data.",
+      align = "c") %>%
+  kable_styling(full_width = FALSE) %>%
+  add_header_above(c(" " = 2, "Lung Cancer" = 2, " " = 2, "Lung Cancer" = 2))
+```
+
+
+=======
+# Maeric continued here
 
 ## 4.1 Experiments Setup: Data Split
 
 ```{r Data Split}
+lung_cancer_balanced <- lung_cancer_balanced %>%
+  select(!AGE_GROUP)
+
 set.seed(123)
 
 split <- initial_validation_split(lung_cancer_balanced, prop=c(0.7, 0.1))
@@ -301,3 +412,95 @@ write.csv(validation_set, "validation.csv")
 ```
 
 ## 4.1 Experiments Setup: Creating ML Models
+
+# Naive Bayes
+
+```{r}
+# 1. Fixed helper function to handle mdlp cut points (by column position/name)
+apply_mdlp_cuts <- function(data, cutp) {
+  discretized_data <- data
+  
+  for (i in seq_along(names(data))) {
+    col <- names(data)[i]
+    # mdlp() stores cut points in cutp[[i]]
+    cuts <- cutp[[i]] 
+    
+    if (!is.null(cuts) && !all(is.na(cuts)) && cuts[1] != "All") {
+      breaks <- c(-Inf, as.numeric(cuts), Inf)
+      discretized_data[[col]] <- as.integer(
+        cut(data[[col]], breaks = breaks, include.lowest = TRUE)
+      )
+    } else {
+      discretized_data[[col]] <- 1L
+    }
+  }
+  return(discretized_data)
+}
+
+# -------------------------------------------------------------
+# 2. Implement Supervised Discretization
+# -------------------------------------------------------------
+# Ensure target is a factor
+train_set$LUNG_CANCER <- as.factor(train_set$LUNG_CANCER)
+test_set$LUNG_CANCER  <- as.factor(test_set$LUNG_CANCER)
+
+# Subset AGE and LUNG_CANCER for MDLP (MDLP requires target as the last column)
+train_num <- train_set %>% select(AGE, LUNG_CANCER)
+
+# Fit Fayyad & Irani's MDL model
+mdlp_model <- mdlp(train_num)
+
+# Extract discretized training feature
+train_discretized <- mdlp_model$Disc.data
+
+# Apply training cut points to test_set
+test_discretized <- apply_mdlp_cuts(test_set[, "AGE", drop = FALSE], mdlp_model$cutp)
+
+# -------------------------------------------------------------
+# 3. Reform Datasets
+# -------------------------------------------------------------
+numeric_cols <- "AGE"
+cat_cols     <- c("GENDER", "SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", 
+                  "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", 
+                  "COUGHING", "SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
+
+# Combine discretized AGE with categorical predictors and target
+train_set_nb <- cbind(
+  AGE = train_discretized[, "AGE"], 
+  train_set[, cat_cols, drop = FALSE], 
+  LUNG_CANCER = train_set$LUNG_CANCER
+)
+
+test_set_nb <- cbind(
+  AGE = test_discretized[, "AGE"], 
+  test_set[, cat_cols, drop = FALSE], 
+  LUNG_CANCER = test_set$LUNG_CANCER
+)
+
+# -------------------------------------------------------------
+# 4. Fit Naive Bayes (useKernelEstimator: False)
+# -------------------------------------------------------------
+tune_grid <- expand.grid(
+  usekernel = FALSE, # Gaussian distribution assumption
+  laplace = 0,
+  adjust = 1
+)
+
+train_ctrl <- trainControl(method = "cv", number = 10)
+
+nb_model <- train(
+  LUNG_CANCER ~ .,
+  data = train_set_nb,
+  method = "naive_bayes",
+  trControl = train_ctrl,
+  tuneGrid = tune_grid
+)
+
+# -------------------------------------------------------------
+# 5. Predict & Evaluate (Fixed variable name to test_set_nb)
+# -------------------------------------------------------------
+nb_preds <- predict(nb_model, newdata = test_set_nb)
+
+conf_matrix <- confusionMatrix(nb_preds, test_set_nb$LUNG_CANCER)
+print(conf_matrix)
+```

@@ -15,22 +15,28 @@ This is documentation for processes performed for Parent Paper 1.
 ## 0. Load Libraries
 
 ```{r}
+# Clear environment
 remove(list=ls())
 
-# Load the necessary libraries
-library(pROC)
-library(smotefamily)
-library(caret) # for regression
-library(ggplot2)
-library(corrplot)
+# General
 library(tidyverse)
 library(dplyr)
-library(randomForest)
+library(kableExtra)
+library(rsample) # Data split
+library(ggplot2)
+library(corrplot)
+
+# Data Pre-processing
+library(smotefamily)
 #library(FSelector)  # for Gain Ratio but not working so computed it manually instead
 library(themis)
-library(kableExtra)
 
-library(rsample) # Data split
+# ML Model Packages
+library(randomForest)
+library(naivebayes)
+library(discretization) # For supervised discretization (MDLP method)
+library(caret) # for regression
+library(pROC)
 ```
 
 # Load the data
@@ -383,11 +389,12 @@ kable(table2_side_by_side,
 =======
 # Maeric continued here
 
-## 3.3 Features Analysis: Table 2
-
 ## 4.1 Experiments Setup: Data Split
 
 ```{r Data Split}
+lung_cancer_balanced <- lung_cancer_balanced %>%
+  select(!AGE_GROUP)
+
 set.seed(123)
 
 split <- initial_validation_split(lung_cancer_balanced, prop=c(0.7, 0.1))
@@ -405,4 +412,95 @@ write.csv(validation_set, "validation.csv")
 ```
 
 ## 4.1 Experiments Setup: Creating ML Models
->>>>>>> f13324f0d228eec53867d8f18bf0a5fe8fd5b819
+
+# Naive Bayes
+
+```{r}
+# 1. Fixed helper function to handle mdlp cut points (by column position/name)
+apply_mdlp_cuts <- function(data, cutp) {
+  discretized_data <- data
+  
+  for (i in seq_along(names(data))) {
+    col <- names(data)[i]
+    # mdlp() stores cut points in cutp[[i]]
+    cuts <- cutp[[i]] 
+    
+    if (!is.null(cuts) && !all(is.na(cuts)) && cuts[1] != "All") {
+      breaks <- c(-Inf, as.numeric(cuts), Inf)
+      discretized_data[[col]] <- as.integer(
+        cut(data[[col]], breaks = breaks, include.lowest = TRUE)
+      )
+    } else {
+      discretized_data[[col]] <- 1L
+    }
+  }
+  return(discretized_data)
+}
+
+# -------------------------------------------------------------
+# 2. Implement Supervised Discretization
+# -------------------------------------------------------------
+# Ensure target is a factor
+train_set$LUNG_CANCER <- as.factor(train_set$LUNG_CANCER)
+test_set$LUNG_CANCER  <- as.factor(test_set$LUNG_CANCER)
+
+# Subset AGE and LUNG_CANCER for MDLP (MDLP requires target as the last column)
+train_num <- train_set %>% select(AGE, LUNG_CANCER)
+
+# Fit Fayyad & Irani's MDL model
+mdlp_model <- mdlp(train_num)
+
+# Extract discretized training feature
+train_discretized <- mdlp_model$Disc.data
+
+# Apply training cut points to test_set
+test_discretized <- apply_mdlp_cuts(test_set[, "AGE", drop = FALSE], mdlp_model$cutp)
+
+# -------------------------------------------------------------
+# 3. Reform Datasets
+# -------------------------------------------------------------
+numeric_cols <- "AGE"
+cat_cols     <- c("GENDER", "SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", 
+                  "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", 
+                  "COUGHING", "SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
+
+# Combine discretized AGE with categorical predictors and target
+train_set_nb <- cbind(
+  AGE = train_discretized[, "AGE"], 
+  train_set[, cat_cols, drop = FALSE], 
+  LUNG_CANCER = train_set$LUNG_CANCER
+)
+
+test_set_nb <- cbind(
+  AGE = test_discretized[, "AGE"], 
+  test_set[, cat_cols, drop = FALSE], 
+  LUNG_CANCER = test_set$LUNG_CANCER
+)
+
+# -------------------------------------------------------------
+# 4. Fit Naive Bayes (useKernelEstimator: False)
+# -------------------------------------------------------------
+tune_grid <- expand.grid(
+  usekernel = FALSE, # Gaussian distribution assumption
+  laplace = 0,
+  adjust = 1
+)
+
+train_ctrl <- trainControl(method = "cv", number = 10)
+
+nb_model <- train(
+  LUNG_CANCER ~ .,
+  data = train_set_nb,
+  method = "naive_bayes",
+  trControl = train_ctrl,
+  tuneGrid = tune_grid
+)
+
+# -------------------------------------------------------------
+# 5. Predict & Evaluate (Fixed variable name to test_set_nb)
+# -------------------------------------------------------------
+nb_preds <- predict(nb_model, newdata = test_set_nb)
+
+conf_matrix <- confusionMatrix(nb_preds, test_set_nb$LUNG_CANCER)
+print(conf_matrix)
+```
