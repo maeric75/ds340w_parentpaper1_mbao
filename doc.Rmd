@@ -277,8 +277,11 @@ table1 <- data.frame(
 table1
 ```
 
+# Maeric continued here
 
-# 4.1 Experiments Setup: Data Split
+## 3.3 Features Analysis: Table 2
+
+## 4.1 Experiments Setup: Data Split
 
 ```{r Data Split}
 set.seed(123)
@@ -296,3 +299,5 @@ write.csv(train_set, "training.csv")
 write.csv(test_set, "testing.csv")
 write.csv(validation_set, "validation.csv")
 ```
+
+## 4.1 Experiments Setup: Creating ML Models
