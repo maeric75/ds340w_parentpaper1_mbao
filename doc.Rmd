@@ -77,6 +77,7 @@ library(dplyr)
 library(randomForest)
 #library(FSelector)  # for Gain Ratio but not working so computed it manually instead
 library(themis)
+library(kableExtra)
 ```
 
 ## Load the data
@@ -324,3 +325,105 @@ table1 <- data.frame(
 
 table1
 ```
+
+
+# TABLE 2 WORK
+```{r}
+# ============================================================
+# Table 2: Feature values distribution by Lung Cancer class
+# ============================================================
+
+# List of binary features to summarize (excludes AGE - it's continuous)
+binary_features <- c("GENDER", "SMOKING", "YELLOW_FINGERS", "ANXIETY", 
+                      "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", 
+                      "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING", 
+                      "SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
+
+# Force all binary feature columns to numeric before rounding
+# (as.character first avoids the classic factor -> wrong-number bug)
+lung_cancer_balanced_rounded <- lung_cancer_balanced %>%
+  mutate(across(all_of(binary_features), 
+                ~ round(as.numeric(as.character(.)))))
+
+# Confirm it worked
+str(lung_cancer_balanced_rounded %>% select(all_of(binary_features)))
+```
+
+```{r}
+# Function: for one feature, compute % of whole dataset in each 
+# Feature-value x LUNG_CANCER combination
+feature_table2 <- function(feature_name, data) {
+  data %>%
+    count(!!sym(feature_name), LUNG_CANCER, .drop = FALSE) %>%
+    mutate(pct = n / sum(n) * 100) %>%
+    mutate(LUNG_CANCER = factor(LUNG_CANCER, levels = c(0, 1), labels = c("No", "Yes"))) %>%
+    select(!!sym(feature_name), LUNG_CANCER, pct) %>%
+    pivot_wider(names_from = LUNG_CANCER, values_from = pct) %>%
+    rename(Value = !!sym(feature_name)) %>%
+    mutate(Feature = feature_name, .before = Value)
+}
+
+# Apply to every binary feature and combine into one long table
+table2_long <- map_dfr(binary_features, ~ feature_table2(.x, lung_cancer_balanced_rounded))
+
+table2_long
+```
+
+```{r}
+# ============================================================
+# Format Value labels (0/1 -> No/Yes, or Female/Male for gender)
+# ============================================================
+
+table2_formatted <- table2_long %>%
+  mutate(Value = case_when(
+    Feature == "GENDER" & Value == 0 ~ "Female",
+    Feature == "GENDER" & Value == 1 ~ "Male",
+    Value == 0 ~ "No",
+    Value == 1 ~ "Yes",
+    TRUE ~ as.character(Value)
+  )) %>%
+  mutate(No = round(No, 2), Yes = round(Yes, 2))
+
+table2_formatted
+```
+
+```{r}
+# ============================================================
+# Display as a clean kable table (long format, one feature block at a time)
+# ============================================================
+
+kable(table2_formatted, 
+      col.names = c("Feature", "Value", "No", "Yes"),
+      caption = "Table 2. The distribution of participants in terms of feature values and class label in the balanced data.",
+      align = "c") %>%
+  kable_styling(full_width = FALSE) %>%
+  collapse_rows(columns = 1, valign = "top")
+```
+
+```{r}
+# ============================================================
+# Optional: side-by-side two-column layout like the paper 
+# (splits features into two halves, binds them next to each other)
+# ============================================================
+
+features_left <- binary_features[1:7]
+features_right <- binary_features[8:14]
+
+table2_left <- table2_formatted %>% filter(Feature %in% features_left)
+table2_right <- table2_formatted %>% filter(Feature %in% features_right)
+
+# Bind side by side (row counts match since each feature has 2 rows: No/Yes value)
+table2_side_by_side <- bind_cols(
+  table2_left %>% rename(Feature_L = Feature, Value_L = Value, No_L = No, Yes_L = Yes),
+  table2_right %>% rename(Feature_R = Feature, Value_R = Value, No_R = No, Yes_R = Yes)
+)
+
+kable(table2_side_by_side,
+      col.names = c("Feature", "Value", "No", "Yes", "Feature", "Value", "No", "Yes"),
+      caption = "Table 2. The distribution of participants in terms of feature values and class label in the balanced data.",
+      align = "c") %>%
+  kable_styling(full_width = FALSE) %>%
+  add_header_above(c(" " = 2, "Lung Cancer" = 2, " " = 2, "Lung Cancer" = 2))
+```
+
+
