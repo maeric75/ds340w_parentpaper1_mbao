@@ -1,0 +1,7 @@
+"0",""
+"0","# Add Legend with Model Names"
+"0","legend(""bottomright"", "
+"0","       legend = c(""Naive Bayes"", ""BayesNet"", ""SGD"", ""Linear SVM"", "
+"0","                  ""Logistic Regression"", ""ANN"", ""KNN"", ""Decision Tree"", ""LMT"", ""Random Forest"", ""Random Tree"", ""Rotation Forest"", ""Adaboost""),"
+"0","       col = c(""red"", ""blue"", ""green"", ""purple"", ""orange"", ""brown"", ""pink"", ""darkcyan"", ""darkgreen"", ""lightgreen"", ""maroon"", ""black"", ""darkblue""), "
+"0","       lwd = 2, cex = 0.8)"
