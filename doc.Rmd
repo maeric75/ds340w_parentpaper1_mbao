@@ -1,18 +1,16 @@
 ---
-title: "Parent Paper 1: Data Split"
+title: "DS 340W Midterm Code Update"
 output: html_notebook
 ---
-
-TEST FOR GITHUB REPO
 
 DS 340W: Fall 2026
 Maeric Barrows & Ayla Orona
 
-This is documentation for processes performed for Parent Paper 1.
+This is documentation for processes performed for the midterm code update.
 
-## Aylas work
+# 0. Setup
 
-## 0. Load Libraries
+## Load Libraries
 
 ```{r}
 # Clear environment
@@ -21,6 +19,7 @@ remove(list=ls())
 # General
 library(tidyverse)
 library(dplyr)
+library(knitr)
 library(kableExtra)
 library(rsample) # Data split
 library(ggplot2)
@@ -31,73 +30,69 @@ library(pROC) # ROC curves
 library(smotefamily)
 #library(FSelector)  # for Gain Ratio but not working so computed it manually instead
 library(themis)
-
-# ML Model Packages
 library(randomForest)
-library(caret) # for regression
-library(naivebayes)
-library(discretization) # For supervised discretization (MDLP method)
-library(bnlearn) # BayesNet
-library(LiblineaR) # SGD
-library(e1071) # SVM
-library(glmnet) # Logistic Regression
-library(nnet) # Neural networks
-library(C50) # J48
-library(partykit) # LMT
-library(rpart) # REPTree
-library(rotationForest)
 ```
 
-# Load the data
+## Load Data
+ 
+Our data comes from Kaggle. It is a 20,000 observation, 16 feature dataset featuring data on patients with and without lung cancer and their symptoms.
+
+Link: https://www.kaggle.com/datasets/akashnath29/lung-cancer-dataset
 
 ```{r}
 # Load the dataset
-lung_cancer <- read.csv("survey lung cancer.csv")
+lung_cancer <- read.csv("parentpaper1_data.csv")
 
 head(lung_cancer)
 ```
 
+# 1. Data Cleaning and EDA
+
 ## Data Cleaning
 
 ```{r}
-# Convert binary variables (1= No, 2 = Yes) to 0/1
+# Convert binary variables (1, 2) to 0/1 (0=No, 1=Yes)
 binary_vars <- c("SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING","SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
 
 lung_cancer[binary_vars] <- lapply(lung_cancer[binary_vars], function(x) ifelse(x == 2, 1, 0))
 
-# Convert gender to binary(M = 1, F = 0)
+# Convert GENDER M/F to binary (M=1, F=0)
 lung_cancer$GENDER <- ifelse(lung_cancer$GENDER == "M", 1, 0)
 
-# Convert Lunge cancer into binary (YES = 1,  N0 = 0)
-
+# Convert LUNG_CANCER Y/N into binary (YES=1,  NO=0)
 lung_cancer$LUNG_CANCER <- ifelse(lung_cancer$LUNG_CANCER == "YES", 1, 0)
 
-# Check for any missing values
+# Check for missing values
 colSums(is.na(lung_cancer))
 
-
-# check the structure of the data
+# Check data structure
 str(lung_cancer)
+```
+
+Since Age is the only column with any missing values, and there are only 58 observations missing an age, we can remove observations with missing values here.
+
+```{r}
+lung_cancer <- lung_cancer %>%
+  filter(!is.na(AGE))
 ```
 
 ## Exploratory Data Analysis
 
 ```{r}
-
-# Summarry statistics
+# Summary statistics
 summary(lung_cancer)
 
 # Proportion of lung cancer
 prop.table(table(lung_cancer$LUNG_CANCER)) # (Class imbalance)
 ```
 
-## 3.2 Data Preprocessing: SMOTE Class Balancing (50-50)
+The exploratory data analysis indicates that there is significantly more observations with lung cancer than without. 87.2% of observations are indicated to have lung cancer. We will use SMOTE to balance this dataset.
+
+IGNORE SMOTE, IT DOES NOT WORK FOR THIS NEW DATASET
+
+## Data Preprocessing: SMOTE Class Balancing (50-50)
+
 ```{r}
-# ============================================================
-# 3.2 Data Preprocessing: SMOTE Class Balancing (50-50)
-# ============================================================
-
-
 # Convert categorical predictors to factors
 # AGE remains numeric
 smote_data <- lung_cancer %>%
@@ -123,10 +118,7 @@ smote_data <- lung_cancer %>%
 table(smote_data$LUNG_CANCER)
 
 
-# ============================================================
 # Apply SMOTENC
-# ============================================================
-
 set.seed(123)
 
 lung_cancer_balanced <- smotenc(
@@ -136,11 +128,7 @@ lung_cancer_balanced <- smotenc(
   over_ratio = 1
 )
 
-
-# ============================================================
 # Check balanced dataset
-# ============================================================
-
 table(lung_cancer_balanced$LUNG_CANCER)
 
 prop.table(table(lung_cancer_balanced$LUNG_CANCER))
@@ -150,7 +138,17 @@ dim(lung_cancer_balanced)
 str(lung_cancer_balanced)
 ```
 
-## 3.3 Features Analysis: Age Distribution on Balanced Data
+As shown by the table below, SMOTE kept the proportions the same for the other variables but evened out the lung cancer variable.
+
+```{r}
+# Summary statistics in balanced dataset
+summary(lung_cancer_balanced)
+
+# Proportion of lung cancer in balanced dataset
+prop.table(table(lung_cancer_balanced$LUNG_CANCER))
+```
+
+## Features Analysis: Age Distribution on Balanced Data
 
 ```{r}
 # Create age groups matching 5-year bins
@@ -192,11 +190,10 @@ ggplot(age_group_pct, aes(x = AGE_GROUP, y = pct, fill = LUNG_CANCER)) +
 ## 3.3 Features Analysis: Feature Ranking (Table 1)
 
 ```{r}
-# ============================================================
 # Random Forest Feature Importance (Gini-based)
-# ============================================================
 
-ranking_data <- lung_cancer_balanced
+ranking_data <- lung_cancer_balanced %>%
+  select(!AGE_GROUP)
 
 set.seed(123)
 
@@ -217,10 +214,8 @@ rf_importance
 ```
 
 ```{r}
-# ============================================================
-# Manual Gain Ratio calculation (no Java/FSelector dependency needed)
+# Gain Ratio
 # Formula: GR(fi) = [H(c) - H(c|fi)] / H(fi)
-# ============================================================
 
 # Entropy function: H(X) = -sum(p * log2(p))
 entropy <- function(x) {
@@ -259,9 +254,7 @@ gain_ratio_single <- function(class_var, feature_var) {
 
 
 ```{r}
-# ============================================================
 # Apply Gain Ratio to all features
-# ============================================================
 
 feature_names <- setdiff(names(ranking_data), "LUNG_CANCER")
 class_var <- ranking_data$LUNG_CANCER
@@ -280,9 +273,7 @@ gain_ratio_result
 ```
 
 ```{r}
-# ============================================================
 # Combine into Table 1 format (Random Forest | Gain Ratio side by side)
-# ============================================================
 
 table1 <- data.frame(
   RF_Feature = rf_importance$Feature,
@@ -291,9 +282,23 @@ table1 <- data.frame(
   GR_Ranking = gain_ratio_result$GR_Ranking
 )
 
-table1
+kable_table <- kable(
+  table1,
+  caption = "<b>Feature Selection for Early Lung Cancer Detection</b>",
+  col.names = c("Feature (RF)", "Score (RF)", "Feature (Gain Ratio)", "Score (Gain Ratio)"),
+  align = c("l", "c", "l", "c")
+)
+
+print(kable_table)
 ```
 
+
+```{r}
+library(ggcorrplot)
+model.matrix(~0+., data=ranking_data) %>% 
+  cor(use="pairwise.complete.obs") %>% 
+  ggcorrplot(show.diag=FALSE, type="lower", lab=TRUE, lab_size=1.5)
+```
 
 # TABLE 2 WORK
 ```{r}
@@ -394,10 +399,6 @@ kable(table2_side_by_side,
   add_header_above(c(" " = 2, "Lung Cancer" = 2, " " = 2, "Lung Cancer" = 2))
 ```
 
-
-=======
-# Maeric continued here
-
 ## 4.1 Experiments Setup: Data Split
 
 ```{r Data Split}
@@ -423,6 +424,33 @@ write.csv(validation_set, "validation.csv")
 ## 4.1 Experiments Setup: Creating ML Models
 
 Every model requires 10-fold cross validation. We are setting this up here:
+
+```{r}
+# General
+library(tidyverse)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(rsample) # Data split
+library(ggplot2)
+library(corrplot)
+library(pROC) # ROC curves
+
+# ML Model Packages
+library(randomForest)
+library(caret) # for regression
+library(naivebayes)
+library(discretization) # For supervised discretization (MDLP method)
+library(bnlearn) # BayesNet
+library(LiblineaR) # SGD
+library(e1071) # SVM
+library(glmnet) # Logistic Regression
+library(nnet) # Neural networks
+library(C50) # J48
+library(partykit) # LMT
+library(rpart) # REPTree
+library(rotationForest)
+```
 
 ```{r}
 set.seed(123)
@@ -571,9 +599,11 @@ sgd_model <- train(
   tuneGrid = expand.grid(cost = 1 / (1e-4 * nrow(train_set))),
   trControl = train_ctrl,
   probability = TRUE
-)
+) 
 
-conf_matrix_sgd <- confusionMatrix(predict(sgd_model, newdata = test_set), test_set$LUNG_CANCER)
+sgd_preds <- predict(sgd_model, newdata = test_set)
+
+conf_matrix_sgd <- confusionMatrix(sgd_preds, test_set$LUNG_CANCER)
 print(conf_matrix_sgd)
 ```
 
@@ -590,7 +620,9 @@ svm_model <- train(
   probability = TRUE
 )
 
-conf_matrix_svm <- confusionMatrix(predict(svm_model, newdata = test_set), test_set$LUNG_CANCER)
+svm_preds <- predict(svm_model, newdata = test_set)
+
+conf_matrix_svm <- confusionMatrix(svm_preds, test_set$LUNG_CANCER)
 print(conf_matrix_svm)
 ```
 
@@ -606,7 +638,9 @@ lr_model <- train(
   trControl = train_ctrl
 )
 
-conf_matrix_lr <- confusionMatrix(predict(lr_model, newdata = test_set), test_set$LUNG_CANCER)
+glm_preds <- predict(lr_model, newdata = test_set)
+
+conf_matrix_lr <- confusionMatrix(glm_preds, test_set$LUNG_CANCER)
 print(conf_matrix_lr)
 ```
 
@@ -628,7 +662,9 @@ ann_model <- train(
   trControl = train_ctrl
 )
 
-conf_matrix_ann <- confusionMatrix(predict(ann_model, newdata = test_set), test_set$LUNG_CANCER)
+ann_preds <- predict(ann_model, newdata = test_set)
+
+conf_matrix_ann <- confusionMatrix(ann_preds, test_set$LUNG_CANCER)
 print(conf_matrix_ann)
 ```
 
@@ -644,7 +680,9 @@ knn_model <- train(
   trControl = train_ctrl
 )
 
-conf_matrix_knn <- confusionMatrix(predict(knn_model, newdata = test_set), test_set$LUNG_CANCER)
+knn_preds <- predict(knn_model, newdata = test_set)
+
+conf_matrix_knn <- confusionMatrix(knn_preds, test_set$LUNG_CANCER)
 print(conf_matrix_knn)
 ```
 
@@ -659,14 +697,16 @@ dt_model <- train(
   trControl = train_ctrl
 )
 
-conf_matrix_dt <- confusionMatrix(predict(dt_model, newdata = test_set), test_set$LUNG_CANCER)
+c50_preds <- predict(dt_model, newdata = test_set)
+
+conf_matrix_dt <- confusionMatrix(c50_preds, test_set$LUNG_CANCER)
 print(conf_matrix_dt)
 ```
 
 # Logistic Model Tree (LMT)
 A Model-Based Recursive Partitioning Tree with Linear Regression is the alternative to Weka's LMT.
 
-```{r}
+```{r warning=FALSE}
 library(partykit)
 # --- Define formula ---
 # Dependent variable ~ Split variables | Node logistic regression variables
@@ -896,21 +936,30 @@ conf_matrix_adaboost <- confusionMatrix(adaboost_preds, test_set$LUNG_CANCER)
 print(conf_matrix_adaboost)
 ```
 
-```{r}
-# Compare caret's 10-fold CV results across all caret models
-cv_results <- resamples(list(
-  NaiveBayes = nb_model,
-  SGD        = sgd_model,
-  SVM        = svm_model,
-  Logistic   = lr_model,
-  ANN        = ann_model,
-  KNN        = knn_model,
-  DecisionTree = dt_model
-))
+# NEW: Multilayer Perceptron (MLP)
 
-summary(cv_results)
-bwplot(cv_results, metric = "Accuracy")
+```{r}
+# 1. Train MLP Model
+mlp_model <- train(
+  LUNG_CANCER ~ .,
+  data = train_set,
+  method = "nnet",
+  preProcess = c("center", "scale"),
+  tuneGrid = expand.grid(
+    size = c(3, 5),       # Hidden units
+    decay = c(0.01, 0.1)  # Regularization parameter
+  ),
+  trControl = train_ctrl,
+  trace = FALSE
+)
+
+# 2. Discrete Class Predictions & Confusion Matrix
+mlp_preds <- predict(mlp_model, newdata = test_set)
+conf_matrix_mlp <- confusionMatrix(mlp_preds, test_set$LUNG_CANCER)
+print(conf_matrix_mlp)
 ```
+
+# ROC Curve
 
 ```{r}
 # 1. Define positive class label (e.g., "YES")
@@ -932,6 +981,7 @@ prob_dt  <- predict(dt_model,  newdata = test_set, type = "prob")[, positive_cla
 prob_lmt <- predict(lmt_model, newdata = test_set, type = "response")
 prob_rf <- predict(rf_model, newdata = test_set, type = "prob")[, positive_class]
 prob_rt <- predict(rt_model, newdata = test_set, type = "prob")[, positive_class]
+prob_mlp <- predict(mlp_model, newdata = test_set, type = "prob")[, positive_class]
 
 # 3. Calculate pROC objects
 roc_nb  <- roc(test_set$LUNG_CANCER, prob_nb,  levels = levels(test_set$LUNG_CANCER))
@@ -947,6 +997,7 @@ roc_rf <- roc(test_set$LUNG_CANCER, prob_rf, levels = levels(test_set$LUNG_CANCE
 roc_rt <- roc(test_set$LUNG_CANCER, prob_rt, levels = levels(test_set$LUNG_CANCER))
 roc_rotf <- roc(test_set$LUNG_CANCER, prob_rotf, levels = levels(test_set$LUNG_CANCER))
 roc_adaboost <- roc(test_set$LUNG_CANCER, prob_adaboost, levels = levels(test_set$LUNG_CANCER))
+roc_mlp <- roc(test_set$LUNG_CANCER, prob_mlp, levels = levels(test_set$LUNG_CANCER))
 
 # 4. Plot Overlaying ROC Curves
 plot(roc_nb,  col = "red",         main = "ROC Curves Comparison across Models", legacy.axes = TRUE)
@@ -962,14 +1013,95 @@ plot(roc_rf,  col = "lightgreen",   add = TRUE)
 plot(roc_rt,  col = "maroon",   add = TRUE)
 plot(roc_rotf,  col = "black",   add = TRUE)
 plot(roc_adaboost,  col = "darkblue",   add = TRUE)
+plot(roc_mlp,  col = "cyan",   add = TRUE)
 
 # Add Legend with Model Names
 legend("bottomright", 
        legend = c("Naive Bayes", "BayesNet", "SGD", "Linear SVM", 
-                  "Logistic Regression", "ANN", "KNN", "Decision Tree", "LMT", "Random Forest", "Random Tree", "Rotation Forest", "Adaboost"),
-       col = c("red", "blue", "green", "purple", "orange", "brown", "pink", "darkcyan", "darkgreen", "lightgreen", "maroon", "black", "darkblue"), 
+                  "Logistic Regression", "ANN", "KNN", "Decision Tree", "LMT", "Random Forest", "Random Tree", "Rotation Forest", "Adaboost", "MLP"),
+       col = c("red", "blue", "green", "purple", "orange", "brown", "pink", "darkcyan", "darkgreen", "lightgreen", "maroon", "black", "darkblue", "cyan"), 
        lwd = 2, cex = 0.8)
+```
 
+
+# Summary Table
+
+```{r}
+library(knitr)
+
+# Define positive class label (e.g., "YES" or "1")
+positive_class <- levels(test_set$LUNG_CANCER)[2]
+
+neg_class <- levels(test_set$LUNG_CANCER)[1]
+
+rotf_preds <- factor(
+  ifelse(prob_rotf > 0.5, positive_class, neg_class),
+  levels = levels(test_set$LUNG_CANCER)
+)
+
+# --- Helper Function to Extract Metrics safely from Confusion Matrix ---
+get_metrics <- function(predictions, actual, pos_class) {
+  cm <- confusionMatrix(predictions, actual, positive = pos_class)
+  
+  acc <- cm$overall["Accuracy"]
+  prec <- cm$byClass["Precision"]
+  rec  <- cm$byClass["Sensitivity"] # Sensitivity = Recall
+  
+  return(c(Accuracy = unname(acc), Precision = unname(prec), Recall = unname(rec)))
+}
+
+# --- Compile Predictions from All Models ---
+# Assumes each model's predicted class factor vector is stored from earlier steps:
+models_preds <- list(
+  "Naive Bayes"         = nb_preds,
+  "BayesNet"            = bn_preds,
+  "SGD"                 = sgd_preds,
+  "Linear SVM"          = svm_preds,
+  "Logistic Regression" = glm_preds,
+  "ANN"                 = ann_preds,
+  "KNN (K=3)"           = knn_preds,
+  "C5.0 Tree"           = c50_preds,
+  "Random Forest"       = rf_preds,
+  "Random Tree"         = rt_preds,
+  "REPTree"             = reptree_preds,
+  "LMT (glmtree)"       = lmt_preds,
+  "Rotation Forest"     = rotf_preds,
+  "AdaBoost.M1"         = adaboost_preds,
+  "ML Perceptron"       = mlp_preds
+)
+
+# Build metrics matrix
+results_list <- lapply(models_preds, function(preds) {
+  get_metrics(preds, test_set$LUNG_CANCER, pos_class = positive_class)
+})
+
+# Convert list to Data Frame
+benchmark_df <- do.call(rbind, results_list) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "Model") %>%
+  mutate(
+    Accuracy  = round(Accuracy, 4),
+    Precision = round(Precision, 4),
+    Recall    = round(Recall, 4)
+  ) %>%
+  arrange(desc(Accuracy)) # Sort by highest accuracy
+
+# Render formatted HTML/Markdown table
+kable_table <- kable(
+  benchmark_df,
+  caption = "<b>Performance Summary across Machine Learning Models</b>",
+  col.names = c("Model", "Accuracy", "Precision", "Recall"),
+  align = c("l", "c", "c", "c")
+)
+
+# Print the table
+print(kable_table)
+```
+
+
+Useful for later?
+
+```{r}
 # 5. Output AUC Summary Table
 auc_table <- data.frame(
   Model = c("Naive Bayes", "BayesNet", "SGD", "Linear SVM", 
@@ -981,4 +1113,20 @@ auc_table <- data.frame(
 )
 
 print(auc_table)
+```
+
+```{r}
+# Compare caret's 10-fold CV results across all caret models
+cv_results <- resamples(list(
+  NaiveBayes = nb_model,
+  SGD        = sgd_model,
+  SVM        = svm_model,
+  Logistic   = lr_model,
+  ANN        = ann_model,
+  KNN        = knn_model,
+  DecisionTree = dt_model
+))
+
+summary(cv_results)
+bwplot(cv_results, metric = "Accuracy")
 ```

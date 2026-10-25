@@ -1,0 +1,4 @@
+"0","# Load the dataset"
+"0","lung_cancer <- read.csv(""parentpaper1_data.csv"")"
+"0",""
+"0","head(lung_cancer)"

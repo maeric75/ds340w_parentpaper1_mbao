@@ -1,0 +1,2 @@
+"0","lung_cancer <- lung_cancer %>%"
+"0","  filter(!is.na(AGE))"
