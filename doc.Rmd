@@ -8,6 +8,8 @@ Maeric Barrows & Ayla Orona
 
 This is documentation for processes performed for the midterm code update.
 
+Note: Information on how the dataset was obtained 
+
 # 0. Setup
 
 ## Load Libraries
