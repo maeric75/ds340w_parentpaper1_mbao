@@ -1,0 +1,3 @@
+"0","# Order by variable group: ID & Cancer, Demographics, BMI & general health, Asthma, Smoking, E-cigs and other forms of tobacco, miscellaneous"
+"0","select_data <- full_dataset %>%"
+"0","  select(SEQNO, CNCRDIFF, CNCRTYP2, SEXVAR, `_AGE_G`, HTIN4, WEIGHT2, `_BMI5`, `_BMI5CAT`, `_RFBMI5`, PHYSHLTH, EXERANY2, STRENGTH, ASTHMA3, `_LTASTH1`, `_CASTHM1`, `_SMOKER3`, `_RFSMOK3`, LCSFIRST, LCSNUMCG, SMOKE100, ECIGNOW2, `_CURECI2`, MENTCIGS, MENTECIG, USENOW3, HEATTBCO, CHCCOPD3, COVIDPO1)"

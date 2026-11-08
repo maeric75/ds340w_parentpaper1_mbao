@@ -1,0 +1,7 @@
+"0","first50 <- full_dataset %>%"
+"0","  select(1:50)"
+"0",""
+"0","## SEQNO - Annual sequence number"
+"0","## SEXVAR - Sex of respondent"
+"0","## EXERANY2 - Exercise in the last 30 days"
+"0","## STRENGTH - How many times do you do physical activity..."

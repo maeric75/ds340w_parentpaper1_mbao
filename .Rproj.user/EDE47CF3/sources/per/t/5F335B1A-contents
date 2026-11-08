@@ -1,0 +1,187 @@
+---
+title: "Final Project: Data Pre-Processing"
+output: html_notebook
+---
+
+This doc contains all of the data pre-processing, along with notes on how it all happened.
+NOTE: Extract the .zip file "LLCP2023XPT" before running this code. The dataset file is so large that it will not upload to GitHub without being compacted first.
+
+```{r}
+# Remove all previous items from environment
+remove(list=ls())
+
+# Packages
+library(dplyr) # Data cleaning
+library(haven) # Read .XPT file
+library(MatchIt) # Non-parametric Pre-processing
+
+# Read in the entire dataset
+full_dataset <- read_xpt("Data/LLCP2023XPT/LLCP2023.xpt")
+```
+
+The next few code chunks detail the process of finding important variables
+
+```{r}
+first50 <- full_dataset %>%
+  select(1:50)
+
+## SEQNO - Annual sequence number
+## SEXVAR - Sex of respondent
+## EXERANY2 - Exercise in the last 30 days
+## STRENGTH - How many times do you do physical activity...
+```
+
+```{r}
+data51to100 <- full_dataset %>%
+  select(51:100)
+## WEIGHT2 - Reported weight in pounds
+## ASTHMA3 - Ever told you had asthma?
+# CHCCOPD3 - Ever told you had COPD, emphysema, or...
+## SMOKE100 - Smoked at least 100 cigarettes
+## USENOW3 - Use of smokeless tobacco products
+## ECIGNOW2 - Do you now use e-cigarettes or vaping...
+```
+
+```{r}
+data101to150 <- full_dataset %>%
+  select(101:150)
+
+## LCSFIRST - How old when you first started smoking?
+## LCSNUMCG - On average, how many cigarettes do you smoke...
+```
+
+```{r}
+data151to200 <- full_dataset %>%
+  select(151:200)
+
+# COVIDPO1 - Have you ever tested positive for COVID-19?
+## CNCRDIFF - How many types of cancer?
+## CNCRTYP2 - Type of cancer
+## MENTCIGS - Do you usually smoke menthol cigarettes?
+## MENTECIG - Do you usually use menthol e-cigarettes?
+## HEATTBCO - Have you heard of heated tobacco product?
+```
+
+```{r}
+data201to250 <- full_dataset %>%
+  select(201:250)
+
+# No potentially significant variables
+```
+
+```{r}
+data251to300 <- full_dataset %>%
+  select(251:300)
+
+# No potentially significant variables
+```
+
+```{r}
+last50 <- full_dataset %>%
+  select(301:350)
+
+## HTIN4 - Computed height in inches
+## _LTASTH1 - lifetime asthma (calculated variable)
+## _CASTHM1 - current asthma (calculated variable)
+## _SEX - sex (calculated variable)
+## _AGE_G - Imputed age in six groups
+## _BMI5 - Computed BMI
+## _BMI5CAT - Computer BMI categories
+## _RFBMI5 - BMI indicator (overweight or obese = ?)
+## _SMOKER3 - Computed smoking status
+## _RFSMOK3 - Current smoker (calculated variable)
+## _CURECI2 - Current e-cigarette use (calculated variable)
+```
+
+```{r}
+# Order by variable group: ID & Cancer, Demographics, BMI & general health, Asthma, Smoking, E-cigs and other forms of tobacco, miscellaneous
+select_data <- full_dataset %>%
+  select(SEQNO, CNCRDIFF, CNCRTYP2, SEXVAR, `_AGE_G`, HTIN4, WEIGHT2, `_BMI5`, `_BMI5CAT`, `_RFBMI5`, PHYSHLTH, EXERANY2, STRENGTH, ASTHMA3, `_LTASTH1`, `_CASTHM1`, `_SMOKER3`, `_RFSMOK3`, LCSFIRST, LCSNUMCG, SMOKE100, ECIGNOW2, `_CURECI2`, MENTCIGS, MENTECIG, USENOW3, HEATTBCO, CHCCOPD3, COVIDPO1)
+```
+
+```{r}
+# 3. Clean and recode features
+clean_df <- select_data %>%
+  mutate(
+    # Target: 1 if Lung Cancer (code 14), 0 otherwise
+    LUNG_CANCER = if_else(CNCRTYP2 == 14, 1, 0, missing = 0),
+    
+    # COPD: 1 = Yes, 0 = No (filter out 7=Don't know, 9=Refused)
+    COPD = case_when(CHCCOPD3 == 1 ~ 1, CHCCOPD3 == 2 ~ 0, TRUE ~ NA_real_),
+    
+    # Asthma: 1 = Yes, 0 = No
+    ASTHMA = case_when(ASTHMA3 == 1 ~ 1, ASTHMA3 == 2 ~ 0, TRUE ~ NA_real_),
+    
+    # Smoking: 1 = Current/Former, 0 = Never
+    SMOKER = case_when(`_SMOKER3` %in% c(1, 2, 3) ~ 1, `_SMOKER3` == 4 ~ 0, TRUE ~ NA_real_),
+    
+    # Days with poor physical symptoms (88 means zero days in BRFSS)
+    POOR_PHYS_DAYS = case_when(PHYSHLTH == 88 ~ 0, PHYSHLTH <= 30 ~ PHYSHLTH, TRUE ~ NA_real_),
+    
+    # BMI (stored with 2 implied decimal places)
+    BMI = `_BMI5` / 100,
+    
+    # Assign each age group its literal meaning
+    AGE_GROUP = ifelse(`_AGE_G` == 1, "18-24",
+                       ifelse(`_AGE_G` == 2, "25-34",
+                              ifelse(`_AGE_G` == 3, "35-44",
+                                     ifelse(`_AGE_G` == 4, "45-54",
+                                            ifelse(`_AGE_G` == 5, "55-64", "65+"))))),
+    
+    # Male or Female as reported by the respondent
+    GENDER = ifelse(SEXVAR == 1, "Male", "Female"),
+    
+    # If respondent exercised in the past month, 1
+    EXERCISE = ifelse(EXERANY2==1, 1, 0),
+    
+    # If respondent has smoked 100 cigarettes lifetime, 1
+    SMOKE100 = case_when(SMOKE100 %in% c(1,7) ~ 1, !(SMOKE100 %in% c(1,7)) ~ 0),
+    
+    # If respondent currently smokes e-cigarettes, 1
+    ECIGS = ifelse(`_CURECI2` == 2, 1, 0),
+    
+    # If respondent currently uses smokeless tobacco, 1
+    SMOKELESS_TOBACCO = ifelse(USENOW3 %in% c(1,2), 1, 0),
+    
+    # If respondent has ever been diagnosed with COVID-19, 1
+    COVID19 = ifelse(COVIDPO1 == 1, 1, 0)
+    
+  ) %>%
+  
+  rename("HEIGHT"=HTIN4,
+         "WEIGHT"=WEIGHT2) %>%
+  
+  select(SEQNO, LUNG_CANCER, COPD, ASTHMA, SMOKER, POOR_PHYS_DAYS, HEIGHT, WEIGHT, BMI, AGE_GROUP, GENDER, EXERCISE, SMOKE100, ECIGS, SMOKELESS_TOBACCO, COVID19)
+```
+
+```{r}
+# Obtain non-cancer observations through MatchIt
+# Addresses class difference before cross validation, we will likely still need SMOTE
+
+library(MatchIt)
+set.seed(123)
+matched_model <- matchit(
+  LUNG_CANCER ~ AGE_GROUP + GENDER,
+  data = clean_df,
+  method = "nearest",
+  ratio = 3
+)
+
+# Extract the matched dataset (~1,500 rows)
+balanced_data <- match.data(matched_model)
+```
+
+
+```{r}
+# 4. Filter out NAs in custom columns
+balanced_data <- balanced_data %>%
+  filter(!is.na(COPD), !is.na(ASTHMA), !is.na(SMOKER), !is.na(POOR_PHYS_DAYS), !is.na(HEIGHT), !is.na(WEIGHT), !is.na(BMI), !is.na(COVID19)) %>%
+  select(SEQNO:COVID19)
+
+# 5. Check total lung cancer cases
+table(balanced_data$LUNG_CANCER)
+```
+
+```{r}
+write.csv(balanced_data, "final_dataset.csv")
+```

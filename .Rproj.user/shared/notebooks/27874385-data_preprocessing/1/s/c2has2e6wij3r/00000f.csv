@@ -1,0 +1,8 @@
+"0","data51to100 <- full_dataset %>%"
+"0","  select(51:100)"
+"0","## WEIGHT2 - Reported weight in pounds"
+"0","## ASTHMA3 - Ever told you had asthma?"
+"0","# CHCCOPD3 - Ever told you had COPD, emphysema, or..."
+"0","## SMOKE100 - Smoked at least 100 cigarettes"
+"0","## USENOW3 - Use of smokeless tobacco products"
+"0","## ECIGNOW2 - Do you now use e-cigarettes or vaping..."

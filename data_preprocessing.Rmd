@@ -4,6 +4,7 @@ output: html_notebook
 ---
 
 This doc contains all of the data pre-processing, along with notes on how it all happened.
+NOTE: Extract the .zip file "LLCP2023XPT" before running this code. The dataset file is so large that it will not upload to GitHub without being compacted first.
 
 ```{r}
 # Remove all previous items from environment
@@ -15,7 +16,7 @@ library(haven) # Read .XPT file
 library(MatchIt) # Non-parametric Pre-processing
 
 # Read in the entire dataset
-full_dataset <- read_xpt("Data/LLCP2023.xpt")
+full_dataset <- read_xpt("Data/LLCP2023XPT/LLCP2023.xpt")
 ```
 
 The next few code chunks detail the process of finding important variables
@@ -174,7 +175,8 @@ balanced_data <- match.data(matched_model)
 ```{r}
 # 4. Filter out NAs in custom columns
 balanced_data <- balanced_data %>%
-  filter(!is.na(COPD), !is.na(ASTHMA), !is.na(SMOKER), !is.na(POOR_PHYS_DAYS), !is.na(HEIGHT), !is.na(WEIGHT), !is.na(BMI), !is.na(COVID19))
+  filter(!is.na(COPD), !is.na(ASTHMA), !is.na(SMOKER), !is.na(POOR_PHYS_DAYS), !is.na(HEIGHT), !is.na(WEIGHT), !is.na(BMI), !is.na(COVID19)) %>%
+  select(SEQNO:COVID19)
 
 # 5. Check total lung cancer cases
 table(balanced_data$LUNG_CANCER)

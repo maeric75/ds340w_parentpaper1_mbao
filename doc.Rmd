@@ -37,13 +37,13 @@ library(randomForest)
 
 ## Load Data
  
-Our data comes from Kaggle. It is a 20,000 observation, 16 feature dataset featuring data on patients with and without lung cancer and their symptoms.
+Our data comes from the CDC's Behavioral Risk Factor Survey System. The original dataset contains over 400,000 observations and 350 features, with only 355 observations diagnosed with lung cancer. To address this class disparity, we used MatchIt to create a representative and manageable spread of cancer and non-cancer observations. We have filtered the dataset down to 1,346 observations with 14 features we think could be significant to early detection of lung cancer.
 
-Link: https://www.kaggle.com/datasets/akashnath29/lung-cancer-dataset
+Link: https://www.cdc.gov/brfss/annual_data/annual_2023.html
 
 ```{r}
 # Load the dataset
-lung_cancer <- read.csv("parentpaper1_data.csv")
+lung_cancer <- read.csv("final_dataset.csv")
 
 head(lung_cancer)
 ```
@@ -53,29 +53,26 @@ head(lung_cancer)
 ## Data Cleaning
 
 ```{r}
-# Convert binary variables (1, 2) to 0/1 (0=No, 1=Yes)
-binary_vars <- c("SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING","SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
-
-lung_cancer[binary_vars] <- lapply(lung_cancer[binary_vars], function(x) ifelse(x == 2, 1, 0))
+# Remove ID columns
+lung_cancer <- lung_cancer %>%
+  select(!X) %>%
+  select(!SEQNO)
 
 # Convert GENDER M/F to binary (M=1, F=0)
-lung_cancer$GENDER <- ifelse(lung_cancer$GENDER == "M", 1, 0)
+lung_cancer$GENDER <- ifelse(lung_cancer$GENDER == "Male", 1, 0)
 
-# Convert LUNG_CANCER Y/N into binary (YES=1,  NO=0)
-lung_cancer$LUNG_CANCER <- ifelse(lung_cancer$LUNG_CANCER == "YES", 1, 0)
+# Convert Age Group to factor
+lung_cancer$AGE_GROUP <- as.factor(case_when(lung_cancer$AGE_GROUP == "25-34" ~ 0,
+                                             lung_cancer$AGE_GROUP == "35-44" ~ 1,
+                                             lung_cancer$AGE_GROUP == "45-54" ~ 2,
+                                             lung_cancer$AGE_GROUP == "55-64" ~ 3,
+                                             lung_cancer$AGE_GROUP == "65+" ~ 4))
 
 # Check for missing values
 colSums(is.na(lung_cancer))
 
 # Check data structure
 str(lung_cancer)
-```
-
-Since Age is the only column with any missing values, and there are only 58 observations missing an age, we can remove observations with missing values here.
-
-```{r}
-lung_cancer <- lung_cancer %>%
-  filter(!is.na(AGE))
 ```
 
 ## Exploratory Data Analysis
@@ -88,9 +85,10 @@ summary(lung_cancer)
 prop.table(table(lung_cancer$LUNG_CANCER)) # (Class imbalance)
 ```
 
-The exploratory data analysis indicates that there is significantly more observations with lung cancer than without. 87.2% of observations are indicated to have lung cancer. We will use SMOTE to balance this dataset.
+The exploratory data analysis indicates that there are much less observations with lung cancer than without. 26.4% of observations are indicated to have lung cancer. This is a side effect of using MatchIt to preprocess the data with nonparametric matching methods.
 
-IGNORE SMOTE, IT DOES NOT WORK FOR THIS NEW DATASET
+We also observe a great imbalance in Age Group. 1,039 observations are aged 65+, while only 30 are less than 55.
+
 
 ## Data Preprocessing: SMOTE Class Balancing (50-50)
 
@@ -98,28 +96,13 @@ IGNORE SMOTE, IT DOES NOT WORK FOR THIS NEW DATASET
 # Convert categorical predictors to factors
 # AGE remains numeric
 smote_data <- lung_cancer %>%
-  mutate(
-    GENDER = as.factor(GENDER),
-    SMOKING = as.factor(SMOKING),
-    YELLOW_FINGERS = as.factor(YELLOW_FINGERS),
-    ANXIETY = as.factor(ANXIETY),
-    PEER_PRESSURE = as.factor(PEER_PRESSURE),
-    CHRONIC.DISEASE = as.factor(CHRONIC.DISEASE),
-    FATIGUE = as.factor(FATIGUE),
-    ALLERGY = as.factor(ALLERGY),
-    WHEEZING = as.factor(WHEEZING),
-    ALCOHOL.CONSUMING = as.factor(ALCOHOL.CONSUMING),
-    COUGHING = as.factor(COUGHING),
-    SHORTNESS.OF.BREATH = as.factor(SHORTNESS.OF.BREATH),
-    SWALLOWING.DIFFICULTY = as.factor(SWALLOWING.DIFFICULTY),
-    CHEST.PAIN = as.factor(CHEST.PAIN),
-    LUNG_CANCER = as.factor(LUNG_CANCER)
-  )
+  mutate(across(.cols = c(LUNG_CANCER:SMOKER, GENDER:COVID19), .fns = as.factor))
 
 # Check original class distribution
 table(smote_data$LUNG_CANCER)
+```
 
-
+```{r}
 # Apply SMOTENC
 set.seed(123)
 
@@ -153,19 +136,6 @@ prop.table(table(lung_cancer_balanced$LUNG_CANCER))
 ## Features Analysis: Age Distribution on Balanced Data
 
 ```{r}
-# Create age groups matching 5-year bins
-# Widen lower bound to avoid NA bin from any outlier ages
-lung_cancer_balanced <- lung_cancer_balanced %>%
-  mutate(AGE_GROUP = cut(AGE,
-                          breaks = c(-Inf, 39, 44, 49, 54, 59, 64, 69, 74, 79, 84, Inf),
-                          labels = c("35 -- 39", "40 -- 44", "45 -- 49", "50 -- 54",
-                                     "55 -- 59", "60 -- 64", "65 -- 69", "70 -- 74",
-                                     "75 -- 79", "80 -- 84", "85+"),
-                          right = TRUE))
-
-# Confirm no NAs remain
-sum(is.na(lung_cancer_balanced$AGE_GROUP))
-
 # Calculate percentage as share of the WHOLE balanced dataset (not within-group)
 age_group_pct <- lung_cancer_balanced %>%
   count(LUNG_CANCER, AGE_GROUP, .drop = FALSE) %>%
@@ -176,7 +146,7 @@ age_group_pct <- lung_cancer_balanced %>%
 ggplot(age_group_pct, aes(x = AGE_GROUP, y = pct, fill = LUNG_CANCER)) +
   geom_col(position = "dodge") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 0.01),
-                      limits = c(0, 0.2)) +
+                      limits = c(0, 0.5)) +
   scale_fill_manual(values = c("No" = "#4472C4", "Yes" = "#ED7D31")) +
   labs(title = "Lung Cancer", 
        x = "Age group", y = "Lung cancer", fill = "LUNG_CANCER") +
@@ -308,11 +278,8 @@ model.matrix(~0+., data=ranking_data) %>%
 # Table 2: Feature values distribution by Lung Cancer class
 # ============================================================
 
-# List of binary features to summarize (excludes AGE - it's continuous)
-binary_features <- c("GENDER", "SMOKING", "YELLOW_FINGERS", "ANXIETY", 
-                      "PEER_PRESSURE", "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", 
-                      "WHEEZING", "ALCOHOL.CONSUMING", "COUGHING", 
-                      "SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
+# List of binary features to summarize
+binary_features <- c("COPD", "ASTHMA", "SMOKER", "AGE_GROUP", "GENDER", "EXERCISE", "SMOKE100", "ECIGS", "SMOKELESS_TOBACCO", "COVID19")
 
 # Force all binary feature columns to numeric before rounding
 # (as.character first avoids the classic factor -> wrong-number bug)
@@ -346,13 +313,18 @@ table2_long
 
 ```{r}
 # ============================================================
-# Format Value labels (0/1 -> No/Yes, or Female/Male for gender)
+# Format Value labels (0/1 -> No/Yes, Female/Male for gender, or specified age group)
 # ============================================================
 
 table2_formatted <- table2_long %>%
   mutate(Value = case_when(
     Feature == "GENDER" & Value == 0 ~ "Female",
     Feature == "GENDER" & Value == 1 ~ "Male",
+    Feature == "AGE_GROUP" & Value == 0 ~ "25-34",
+    Feature == "AGE_GROUP" & Value == 1 ~ "35-44",
+    Feature == "AGE_GROUP" & Value == 2 ~ "45-54",
+    Feature == "AGE_GROUP" & Value == 3 ~ "55-64",
+    Feature == "AGE_GROUP" & Value == 4 ~ "65+",
     Value == 0 ~ "No",
     Value == 1 ~ "Yes",
     TRUE ~ as.character(Value)
@@ -375,14 +347,14 @@ kable(table2_formatted,
   collapse_rows(columns = 1, valign = "top")
 ```
 
-```{r}
+```{}
 # ============================================================
 # Optional: side-by-side two-column layout like the paper 
 # (splits features into two halves, binds them next to each other)
 # ============================================================
 
 features_left <- binary_features[1:7]
-features_right <- binary_features[8:14]
+features_right <- binary_features[8:13]
 
 table2_left <- table2_formatted %>% filter(Feature %in% features_left)
 table2_right <- table2_formatted %>% filter(Feature %in% features_right)
@@ -404,16 +376,23 @@ kable(table2_side_by_side,
 ## 4.1 Experiments Setup: Data Split
 
 ```{r Data Split}
-lung_cancer_balanced <- lung_cancer_balanced %>%
-  select(!AGE_GROUP)
-
 set.seed(123)
 
-split <- initial_validation_split(lung_cancer_balanced, prop=c(0.7, 0.1))
+split <- initial_validation_split(lung_cancer_balanced, prop = c(0.7, 0.1))
 
-train_set <- training(split)
-test_set <- testing(split)
+train_set      <- training(split)
+test_set       <- testing(split)
 validation_set <- validation(split)
+
+# Standardize LUNG_CANCER globally
+standardize_target <- function(df) {
+  lung_cancer_balanced$LUNG_CANCER <- factor(lung_cancer_balanced$LUNG_CANCER, levels = c(0, 1), labels = c("No", "Yes"))
+  lung_cancer_balanced
+}
+
+train_set      <- standardize_target(train_set)
+test_set       <- standardize_target(test_set)
+validation_set <- standardize_target(validation_set)
 ```
 
 ```{r}
@@ -458,154 +437,203 @@ library(rotationForest)
 set.seed(123)
 cv_folds <- createFolds(train_set$LUNG_CANCER, k = 10, returnTrain = TRUE)
 
-# Shared 10-Fold CV Control
 train_ctrl <- trainControl(
   method = "cv",
   index = cv_folds,
-  savePredictions = "final"
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final",
+  verboseIter = FALSE
 )
 ```
 
 # Naive Bayes
 
 ```{r}
-# 1. Fixed helper function to handle mdlp cut points (by column position/name)
-apply_mdlp_cuts <- function(data, cutp) {
-  discretized_data <- data
-  
-  for (i in seq_along(names(data))) {
-    col <- names(data)[i]
-    # mdlp() stores cut points in cutp[[i]]
-    cuts <- cutp[[i]] 
-    
-    if (!is.null(cuts) && !all(is.na(cuts)) && cuts[1] != "All") {
-      breaks <- c(-Inf, as.numeric(cuts), Inf)
-      discretized_data[[col]] <- as.integer(
-        cut(data[[col]], breaks = breaks, include.lowest = TRUE)
-      )
-    } else {
-      discretized_data[[col]] <- 1L
-    }
-  }
-  return(discretized_data)
-}
+symptom_cols <- c("COPD", "ASTHMA", "SMOKER", "AGE_GROUP", "GENDER", 
+                  "EXERCISE", "SMOKE100", "ECIGS", "SMOKELESS_TOBACCO", "COVID19")
 
-# -------------------------------------------------------------
-# 2. Implement Supervised Discretization
-# -------------------------------------------------------------
-# Ensure target is a factor
-train_set$LUNG_CANCER <- as.factor(train_set$LUNG_CANCER)
-test_set$LUNG_CANCER  <- as.factor(test_set$LUNG_CANCER)
+train_set[symptom_cols] <- lapply(train_set[symptom_cols], factor)
+test_set[symptom_cols]  <- lapply(test_set[symptom_cols], factor)
 
-# Subset AGE and LUNG_CANCER for MDLP (MDLP requires target as the last column)
-train_num <- train_set %>% select(AGE, LUNG_CANCER)
-
-# Fit Fayyad & Irani's MDL model
-mdlp_model <- mdlp(train_num)
-
-# Extract discretized training feature
-train_discretized <- mdlp_model$Disc.data
-
-# Apply training cut points to test_set
-test_discretized <- apply_mdlp_cuts(test_set[, "AGE", drop = FALSE], mdlp_model$cutp)
-
-# -------------------------------------------------------------
-# 3. Reform Datasets
-# -------------------------------------------------------------
-numeric_cols <- "AGE"
-cat_cols     <- c("GENDER", "SMOKING", "YELLOW_FINGERS", "ANXIETY", "PEER_PRESSURE", 
-                  "CHRONIC.DISEASE", "FATIGUE", "ALLERGY", "WHEEZING", "ALCOHOL.CONSUMING", 
-                  "COUGHING", "SHORTNESS.OF.BREATH", "SWALLOWING.DIFFICULTY", "CHEST.PAIN")
-
-# Combine discretized AGE with categorical predictors and target
-train_set_nb <- cbind(
-  AGE = train_discretized[, "AGE"], 
-  train_set[, cat_cols, drop = FALSE], 
-  LUNG_CANCER = train_set$LUNG_CANCER
+nb_grid <- expand.grid(
+  laplace = c(0, 1, 2),
+  usekernel = c(FALSE, TRUE),
+  adjust = c(1, 1.5)
 )
 
-test_set_nb <- cbind(
-  AGE = test_discretized[, "AGE"], 
-  test_set[, cat_cols, drop = FALSE], 
-  LUNG_CANCER = test_set$LUNG_CANCER
-)
-
-# -------------------------------------------------------------
-# 4. Fit Naive Bayes (useKernelEstimator: False)
-# -------------------------------------------------------------
-tune_grid <- expand.grid(
-  usekernel = FALSE, # Gaussian distribution assumption
-  laplace = 0,
-  adjust = 1
-)
-
+set.seed(42)
 nb_model <- train(
-  LUNG_CANCER ~ .,
-  data = train_set_nb,
+  LUNG_CANCER ~ ., 
+  data = train_set,
   method = "naive_bayes",
   trControl = train_ctrl,
-  tuneGrid = tune_grid
+  tuneGrid = nb_grid,
+  metric = "ROC"
 )
 
-# -------------------------------------------------------------
-# 5. Predict & Evaluate (Fixed variable name to test_set_nb)
-# -------------------------------------------------------------
-nb_preds <- predict(nb_model, newdata = test_set_nb)
-
-conf_matrix <- confusionMatrix(nb_preds, test_set_nb$LUNG_CANCER)
-print(conf_matrix)
+nb_preds <- predict(nb_model, newdata = test_set)
+confusionMatrix(nb_preds, test_set$LUNG_CANCER, positive = "Yes")
 ```
 
 # Bayesian Network (BayesNet)
 
 ```{r}
-# Ensure factors for bnlearn
-train_bn <- data.frame(lapply(train_set_nb, as.factor))
-test_bn  <- data.frame(lapply(test_set_nb, as.factor))
+# Define column groups
+numeric_cols <- c("HEIGHT", "WEIGHT", "BMI")
+factor_cols  <- setdiff(names(train_set), numeric_cols)
 
-# Run 10-fold CV using the exact same fold indices
-bn_cv_acc <- numeric(10)
+# ---------------------------------------------------------
+# 1. Discretize Numeric Variables & Factorize Discrete Ones
+# ---------------------------------------------------------
+# Ensure categorical features are factors
+train_bn <- train_set
+test_bn  <- test_set
+
+train_bn[factor_cols] <- lapply(train_bn[factor_cols], factor)
+test_bn[factor_cols]  <- lapply(test_bn[factor_cols], factor)
+
+# GROUP POOR_PHYS_DAYS SEPARATELY
+# Clinically meaningful bins for poor physical health days (0 to 30)
+# 0 days (None), 1-13 days (Occasional/Moderate), 14-30 days (Frequent/Severe impairment)
+recode_phys_days <- function(x) {
+  cut(
+    x,
+    breaks = c(-Inf, 0, 13, Inf),
+    labels = c("None_0", "Occasional_1_13", "Frequent_14_30"),
+    right = TRUE
+  )
+}
+
+train_bn$POOR_PHYS_DAYS <- recode_phys_days(train_set$POOR_PHYS_DAYS)
+test_bn$POOR_PHYS_DAYS  <- recode_phys_days(test_set$POOR_PHYS_DAYS)
+
+# Discretize continuous columns in training set (e.g., into 3-4 intervals/quantiles)
+# method = "interval" or method = "quantile"
+train_discretized <- discretize(train_bn[, numeric_cols], method = "quantile", breaks = 3)
+train_bn[, numeric_cols] <- train_discretized
+
+# Apply the same cutpoints from train to test set
+for (col in numeric_cols) {
+  # Extract cutpoints used in train set
+  # (or use base::cut with quantile breaks computed on train_set)
+  brks <- quantile(train_set[[col]], probs = seq(0, 1, length.out = 4), na.rm = TRUE)
+  brks[1] <- -Inf
+  brks[length(brks)] <- Inf
+  
+  train_bn[[col]] <- cut(train_set[[col]], breaks = brks, include.lowest = TRUE)
+  test_bn[[col]]  <- cut(test_set[[col]],  breaks = brks, include.lowest = TRUE)
+}
+
+# Ensure all columns in both sets are standard factors with matched levels
+for (col in names(train_bn)) {
+  train_bn[[col]] <- factor(train_bn[[col]])
+  test_bn[[col]]  <- factor(test_bn[[col]], levels = levels(train_bn[[col]]))
+}
+
+# ---------------------------------------------------------
+# 2. 10-Fold Cross-Validation Loop
+# ---------------------------------------------------------
+target_node <- "LUNG_CANCER"
+bn_cv_acc   <- numeric(10)
 
 for (i in 1:10) {
-  train_idx <- cv_folds[[i]]
-  fold_train <- train_bn[train_idx, ]
-  fold_val   <- train_bn[-train_idx, ]
+  val_idx    <- cv_folds[[i]]
+  fold_train <- train_bn[-val_idx, ]
+  fold_val   <- train_bn[val_idx, ]
   
-  # Learn structure (K2/Hill-Climbing) and parameters
+  # Remove single-level columns if any exist in the fold
+  single_level <- sapply(fold_train, function(x) length(unique(x)) < 2)
+  if (any(single_level)) {
+    fold_train <- fold_train[, !single_level]
+    fold_val   <- fold_val[, !single_level]
+  }
+  
+  # Match factor levels
+  for (col in names(fold_train)) {
+    fold_val[[col]] <- factor(fold_val[[col]], levels = levels(fold_train[[col]]))
+  }
+  
+  # Learn structure and fit parameters
   dag <- hc(fold_train)
-  fitted <- bn.fit(dag, data = fold_train)
+  fitted <- bn.fit(dag, data = fold_train, method = "bayes", iss = 1)
   
-  preds <- predict(fitted, node = "LUNG_CANCER", data = fold_val)
-  bn_cv_acc[i] <- mean(preds == fold_val$LUNG_CANCER)
+  # Predict via likelihood weighting
+  preds <- predict(fitted, node = target_node, data = fold_val, method = "bayes-lw")
+  bn_cv_acc[i] <- mean(preds == fold_val[[target_node]], na.rm = TRUE)
 }
 
 cat("BayesNet 10-Fold CV Mean Accuracy:", mean(bn_cv_acc), "\n")
 
-# Fit final BayesNet on full train set and evaluate on test set
+# ---------------------------------------------------------
+# 3. Final Model Evaluation on Test Set
+# ---------------------------------------------------------
 dag_final <- hc(train_bn)
-bn_final  <- bn.fit(dag_final, data = train_bn)
-bn_preds  <- predict(bn_final, node = "LUNG_CANCER", data = test_bn)
+bn_final  <- bn.fit(dag_final, data = train_bn, method = "bayes", iss = 1)
+bn_preds  <- predict(bn_final, node = target_node, data = test_bn, method = "bayes-lw")
 
-conf_matrix_bn <- confusionMatrix(bn_preds, test_bn$LUNG_CANCER)
-print(conf_matrix_bn)
+confusionMatrix(bn_preds, test_bn[[target_node]], positive = "Yes")
 ```
 
 # Stochastic Gradient Descent (SGD)
 
 ```{r}
+library(LiblineaR)
+library(caret)
+
+# ---------------------------------------------------------
+# 1. Recode 0/1 to Valid R Variable Names ("No" / "Yes")
+# ---------------------------------------------------------
+train_sgd <- train_set
+test_sgd <- test_set
+
+if (!all(levels(train_sgd$LUNG_CANCER) %in% c("No", "Yes"))) {
+  train_sgd$LUNG_CANCER <- factor(train_sgd$LUNG_CANCER, 
+                                  levels = c("0", "1"), 
+                                  labels = c("No", "Yes"))
+  
+  test_sgd$LUNG_CANCER  <- factor(test_sgd$LUNG_CANCER, 
+                                  levels = c("0", "1"), 
+                                  labels = c("No", "Yes"))
+}
+
+# ---------------------------------------------------------
+# 2. Configure trainControl
+# ---------------------------------------------------------
+train_ctrl <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final",
+  verboseIter = FALSE
+)
+
+# ---------------------------------------------------------
+# 3. Train Regularized Logistic Regression (SGD Equivalent)
+# ---------------------------------------------------------
+set.seed(42)
 sgd_model <- train(
   LUNG_CANCER ~ .,
-  data = train_set,
-  method = "svmLinear2", # Uses e1071 backend instead of kernlab
+  data = train_sgd,
+  method = "regLogistic",
   preProcess = c("center", "scale"),
-  tuneGrid = expand.grid(cost = 1 / (1e-4 * nrow(train_set))),
+  tuneGrid = expand.grid(
+    cost = 1 / (1e-4 * nrow(train_sgd)),
+    loss = "L2_dual",
+    epsilon = 0.01
+  ),
   trControl = train_ctrl,
-  probability = TRUE
-) 
+  metric = "ROC"
+)
 
-sgd_preds <- predict(sgd_model, newdata = test_set)
+# ---------------------------------------------------------
+# 4. Predict & Evaluate
+# ---------------------------------------------------------
+sgd_preds <- predict(sgd_model, newdata = test_sgd)
 
-conf_matrix_sgd <- confusionMatrix(sgd_preds, test_set$LUNG_CANCER)
+# positive = "Yes" matches the second factor level
+conf_matrix_sgd <- confusionMatrix(sgd_preds, test_sgd$LUNG_CANCER, positive = "Yes")
 print(conf_matrix_sgd)
 ```
 
@@ -614,7 +642,7 @@ print(conf_matrix_sgd)
 ```{r}
 svm_model <- train(
   LUNG_CANCER ~ .,
-  data = train_set,
+  data = train_sgd,
   method = "svmLinear2", # Uses e1071 backend instead of kernlab
   preProcess = c("center", "scale"),
   tuneGrid = expand.grid(cost = 1.0),
@@ -622,9 +650,9 @@ svm_model <- train(
   probability = TRUE
 )
 
-svm_preds <- predict(svm_model, newdata = test_set)
+svm_preds <- predict(svm_model, newdata = test_sgd)
 
-conf_matrix_svm <- confusionMatrix(svm_preds, test_set$LUNG_CANCER)
+conf_matrix_svm <- confusionMatrix(svm_preds, test_sgd$LUNG_CANCER)
 print(conf_matrix_svm)
 ```
 
@@ -633,16 +661,16 @@ print(conf_matrix_svm)
 ```{r}
 lr_model <- train(
   LUNG_CANCER ~ .,
-  data = train_set,
+  data = train_sgd,
   method = "glmnet",
   family = "binomial",
   tuneGrid = expand.grid(alpha = 0, lambda = 1e-8),
   trControl = train_ctrl
 )
 
-glm_preds <- predict(lr_model, newdata = test_set)
+glm_preds <- predict(lr_model, newdata = test_sgd)
 
-conf_matrix_lr <- confusionMatrix(glm_preds, test_set$LUNG_CANCER)
+conf_matrix_lr <- confusionMatrix(glm_preds, test_sgd$LUNG_CANCER)
 print(conf_matrix_lr)
 ```
 
@@ -655,7 +683,7 @@ hidden_a       <- round((num_attributes + num_classes) / 2)
 
 ann_model <- train(
   LUNG_CANCER ~ .,
-  data = train_set,
+  data = train_sgd,
   method = "nnet",
   preProcess = c("center", "scale"),
   tuneGrid = expand.grid(size = hidden_a, decay = 0.0),
@@ -664,9 +692,9 @@ ann_model <- train(
   trControl = train_ctrl
 )
 
-ann_preds <- predict(ann_model, newdata = test_set)
+ann_preds <- predict(ann_model, newdata = test_sgd)
 
-conf_matrix_ann <- confusionMatrix(ann_preds, test_set$LUNG_CANCER)
+conf_matrix_ann <- confusionMatrix(ann_preds, test_sgd$LUNG_CANCER)
 print(conf_matrix_ann)
 ```
 
@@ -675,16 +703,16 @@ print(conf_matrix_ann)
 ```{r}
 knn_model <- train(
   LUNG_CANCER ~ .,
-  data = train_set,
+  data = train_sgd,
   method = "knn",
   preProcess = c("center", "scale"),
   tuneGrid = data.frame(k = 3),
   trControl = train_ctrl
 )
 
-knn_preds <- predict(knn_model, newdata = test_set)
+knn_preds <- predict(knn_model, newdata = test_sgd)
 
-conf_matrix_knn <- confusionMatrix(knn_preds, test_set$LUNG_CANCER)
+conf_matrix_knn <- confusionMatrix(knn_preds, test_sgd$LUNG_CANCER)
 print(conf_matrix_knn)
 ```
 
@@ -694,14 +722,14 @@ J48 is built-in to WEKA. To recreate this within R, C50 is the alternative.
 ```{r}
 dt_model <- train(
   LUNG_CANCER ~ .,
-  data = train_set,
+  data = train_sgd,
   method = "C5.0",
   trControl = train_ctrl
 )
 
-c50_preds <- predict(dt_model, newdata = test_set)
+c50_preds <- predict(dt_model, newdata = test_sgd)
 
-conf_matrix_dt <- confusionMatrix(c50_preds, test_set$LUNG_CANCER)
+conf_matrix_dt <- confusionMatrix(c50_preds, test_sgd$LUNG_CANCER)
 print(conf_matrix_dt)
 ```
 
@@ -710,58 +738,45 @@ A Model-Based Recursive Partitioning Tree with Linear Regression is the alternat
 
 ```{r warning=FALSE}
 library(partykit)
-# --- Define formula ---
-# Dependent variable ~ Split variables | Node logistic regression variables
-lmt_formula <- LUNG_CANCER ~ . | .
 
-# 1. Fit Final LMT Model on Full Training Set
-lmt_model <- glmtree(
-  lmt_formula,
-  data = train_set,
-  family = binomial,
-  minsize = 15
-)
+cv_acc <- numeric(10)
+cv_auc <- numeric(10)
 
-# 2. Run Explicit 10-Fold Cross-Validation for LMT Metrics
-set.seed(123)
-cv_folds <- caret::createFolds(train_set$LUNG_CANCER, k = 10)
-cv_accuracies <- numeric(10)
+formula_str <- as.formula(paste("LUNG_CANCER ~", paste(setdiff(names(train_set), "LUNG_CANCER"), collapse = " + ")))
 
 for (i in 1:10) {
-  cv_train <- train_set[-cv_folds[[i]], ]
-  cv_val   <- train_set[cv_folds[[i]], ]
+  val_idx   <- cv_folds[[i]]
+  fold_train <- train_sgd[-val_idx, ]
+  fold_val   <- train_sgd[val_idx, ]
   
-  fold_fit <- glmtree(
-    lmt_formula,
-    data = cv_train,
+  # Fit glmtree on fold_train
+  tree_fit <- glmtree(
+    formula_str,
+    data = fold_train,
     family = binomial,
-    minsize = 15
+    alpha = 0.05,
+    minsize = 30
   )
   
-  # Predict probabilities and convert to hard class predictions
-  fold_probs <- predict(fold_fit, newdata = cv_val, type = "response")
-  fold_preds <- factor(
-    ifelse(fold_probs > 0.5, levels(train_set$LUNG_CANCER)[2], levels(train_set$LUNG_CANCER)[1]),
-    levels = levels(train_set$LUNG_CANCER)
-  )
+  # Predict probabilities and classes
+  val_probs <- predict(tree_fit, newdata = fold_val, type = "response")
+  val_preds <- factor(ifelse(val_probs >= 0.5, "Yes", "No"), levels = c("No", "Yes"))
   
-  cv_accuracies[i] <- mean(fold_preds == cv_val$LUNG_CANCER)
+  cv_acc[i] <- mean(val_preds == fold_val$LUNG_CANCER)
+  cv_auc[i] <- as.numeric(roc(response = fold_val$LUNG_CANCER, predictor = val_probs, quiet = TRUE)$auc)
 }
 
-cat("LMT 10-Fold CV Mean Accuracy:", round(mean(cv_accuracies), 4), "\n")
+cat("10-Fold CV Mean Accuracy:", mean(cv_acc), "\n")
+cat("10-Fold CV Mean ROC-AUC:", mean(cv_auc), "\n")
 
-# Hard Class Predictions & Confusion Matrix
-lmt_test_probs <- predict(lmt_model, newdata = test_set, type = "response")
-lmt_preds <- factor(
-  ifelse(lmt_test_probs > 0.5, levels(test_set$LUNG_CANCER)[2], levels(test_set$LUNG_CANCER)[1]),
-  levels = levels(test_set$LUNG_CANCER)
-)
+# Fit on full train set and evaluate on test set
+final_lmt <- glmtree(formula_str, data = train_sgd, family = binomial, alpha = 0.05, minsize = 30)
 
-print(caret::confusionMatrix(lmt_preds, test_set$LUNG_CANCER))
+test_probs_lmt <- predict(final_lmt, newdata = test_sgd, type = "response")
+test_preds_lmt <- factor(ifelse(test_probs_lmt >= 0.5, "Yes", "No"), levels = c("No", "Yes"))
 
-# Store probabilities for final ROC Curve plot
-# (type = "response" gives positive class probability directly)
-positive_class <- levels(test_set$LUNG_CANCER)[2]
+conf_matrix_lmt <- confusionMatrix(test_preds_lmt, test_set$LUNG_CANCER, positive = "Yes")
+print(conf_matrix_lmt)
 ```
 
 # Random Forest
@@ -773,7 +788,7 @@ default_mtry <- floor(sqrt(num_predictors))
 
 rf_model <- train(
   LUNG_CANCER ~ .,
-  data = train_set,
+  data = train_sgd,
   method = "rf",
   trControl = train_ctrl,
   ntree = 100, # numIterations = 100
@@ -782,8 +797,8 @@ rf_model <- train(
 )
 
 # 1. Evaluate on holdout test set
-rf_preds <- predict(rf_model, newdata = test_set)
-conf_matrix_rf <- confusionMatrix(rf_preds, test_set$LUNG_CANCER)
+rf_preds <- predict(rf_model, newdata = test_sgd)
+conf_matrix_rf <- confusionMatrix(rf_preds, test_sgd$LUNG_CANCER)
 print(conf_matrix_rf)
 ```
 # Random Tree (RT)
@@ -828,86 +843,100 @@ conf_matrix_reptree <- confusionMatrix(reptree_preds, test_set$LUNG_CANCER)
 print(conf_matrix_reptree)
 
 # 2. Extract probabilities for downstream ROC curve step
-prob_reptree <- predict(reptree_model, newdata = test_set, type = "prob")[, positive_class]
+prob_reptree <- predict(reptree_model, newdata = test_set, type = "prob")[, "Yes"]
 ```
 
 # Rotation Forest (RotF)
 
 ```{r}
+library(rotationForest)
 library(caret)
-library(dplyr)
+library(pROC)
 
-fit_custom_rotation_forest <- function(train_df, test_df, target_col, L = 50, K = 3) {
-  # 1. One-hot encode for PCA feature rotations
-  formula_full <- as.formula(paste(target_col, "~ ."))
-  dummy_proc   <- dummyVars(formula_full, data = train_df, fullRank = TRUE)
-  
-  X_train_mat <- predict(dummy_proc, newdata = train_df)
-  X_test_mat  <- predict(dummy_proc, newdata = test_df)
-  
-  y_train <- train_df[[target_col]]
-  pos_class <- levels(y_train)[2]
-  
-  n_samples <- nrow(X_train_mat)
-  n_features <- ncol(X_train_mat)
-  
-  test_prob_matrix <- matrix(0, nrow = nrow(X_test_mat), ncol = L)
-  
-  for (i in 1:L) {
-    # Bootstrap sample
-    boot_idx <- sample(1:n_samples, replace = TRUE)
-    X_boot   <- X_train_mat[boot_idx, ]
-    
-    # Feature group partitioning
-    feat_indices <- sample(1:n_features)
-    groups       <- split(feat_indices, ceiling(seq_along(feat_indices) / K))
-    
-    # Build transformation rotation matrix R
-    R_matrix <- matrix(0, nrow = n_features, ncol = n_features)
-    
-    for (grp in groups) {
-      if (length(grp) == 0) next
-      sub_data <- X_boot[, grp, drop = FALSE]
-      
-      # Perform PCA on feature subset
-      pca_res <- prcomp(sub_data, center = TRUE, scale. = TRUE)
-      
-      # Fill rotation loadings
-      for (col_i in seq_along(grp)) {
-        R_matrix[grp, grp[col_i]] <- pca_res$rotation[, col_i]
-      }
-    }
-    
-    # Rotate data into PC space
-    X_train_rot <- as.data.frame(X_train_mat %*% R_matrix)
-    X_test_rot  <- as.data.frame(X_test_mat %*% R_matrix)
-    
-    X_train_rot[[target_col]] <- y_train
-    
-    # Train base decision tree on rotated space
-    tree_fit <- train(
-      formula_full,
-      data = X_train_rot,
-      method = "rpart",
-      trControl = trainControl(method = "none"),
-      tuneGrid = expand.grid(cp = 0.01)
-    )
-    
-    # Predict probabilities for this rotated tree
-    preds_prob <- predict(tree_fit, newdata = X_test_rot, type = "prob")[, pos_class]
-    test_prob_matrix[, i] <- preds_prob
-  }
-  
-  # Average predictions across all L rotated trees
-  rowMeans(test_prob_matrix)
+# ---------------------------------------------------------
+# 1. Prepare Features & Integer Targets
+# ---------------------------------------------------------
+# One-hot encode predictors
+x_train_mat <- model.matrix(LUNG_CANCER ~ . - 1, data = train_set)
+x_test_mat  <- model.matrix(LUNG_CANCER ~ . - 1, data = test_set)
+
+# Remove zero-variance dummy columns if any exist
+nzv <- nearZeroVar(x_train_mat)
+if (length(nzv) > 0) {
+  x_train_mat <- x_train_mat[, -nzv, drop = FALSE]
+  x_test_mat  <- x_test_mat[, colnames(x_train_mat), drop = FALSE]
 }
 
-# --- Run Rotation Forest & Extract Probabilities ---
-positive_class <- levels(test_set$LUNG_CANCER)[2]
-prob_rotf      <- fit_custom_rotation_forest(train_set, test_set, "LUNG_CANCER", L = 50, K = 3)
+# rotationForest requires y to be numeric/integer 0 and 1
+# (Convert factor "No"/"Yes" -> integer 0 and 1)
+y_train_num <- ifelse(train_set$LUNG_CANCER == "Yes", 1L, 0L)
+y_test_num  <- ifelse(test_set$LUNG_CANCER == "Yes", 1L, 0L)
 
-# Check probabilities vector
-head(prob_rotf)
+# ---------------------------------------------------------
+# 2. 10-Fold Cross-Validation Loop
+# ---------------------------------------------------------
+cv_acc <- numeric(10)
+cv_auc <- numeric(10)
+
+# Ensure K satisfies (Total Features / K) >= 3
+num_features <- ncol(x_train_mat)
+K_param <- min(3, max(2, floor(num_features / 3)))
+L_param <- 25  # Number of trees
+
+for (i in 1:10) {
+  val_idx <- cv_folds[[i]]
+  
+  # Ensure clean numeric data frames
+  fold_x_tr <- as.data.frame(x_train_mat[-val_idx, , drop = FALSE])
+  fold_y_tr <- y_train_num[-val_idx]
+  
+  fold_x_val <- as.data.frame(x_train_mat[val_idx, , drop = FALSE])
+  fold_y_val <- y_train_num[val_idx]
+  
+  # Fit Rotation Forest using integer target
+  rf_fit <- rotationForest(
+    x = fold_x_tr,
+    y = fold_y_tr,
+    K = K_param,
+    L = L_param
+  )
+  
+  # Predict probabilities for class 1 ("Yes")
+  val_probs <- predict(rf_fit, fold_x_val)
+  if (is.matrix(val_probs)) {
+    val_probs <- val_probs[, 2]
+  }
+  
+  # Convert probabilities to factors matching test_set$LUNG_CANCER
+  val_preds <- factor(ifelse(val_probs >= 0.5, "Yes", "No"), levels = c("No", "Yes"))
+  actual_val <- factor(ifelse(fold_y_val == 1, "Yes", "No"), levels = c("No", "Yes"))
+  
+  cv_acc[i] <- mean(val_preds == actual_val, na.rm = TRUE)
+  cv_auc[i] <- as.numeric(roc(response = actual_val, predictor = val_probs, quiet = TRUE)$auc)
+}
+
+cat("Rotation Forest 10-Fold CV Mean Accuracy:", mean(cv_acc), "\n")
+cat("Rotation Forest 10-Fold CV Mean ROC-AUC:", mean(cv_auc), "\n")
+
+# ---------------------------------------------------------
+# 3. Final Model Evaluation on Test Set
+# ---------------------------------------------------------
+final_rf <- rotationForest(
+  x = as.data.frame(x_train_mat),
+  y = y_train_num,
+  K = K_param,
+  L = L_param
+)
+
+test_probs <- predict(final_rf, as.data.frame(x_test_mat))
+if (is.matrix(test_probs)) {
+  test_probs <- test_probs[, 2]
+}
+
+test_preds_rotf <- factor(ifelse(test_probs >= 0.5, "Yes", "No"), levels = c("No", "Yes"))
+
+conf_matrix_rot <- confusionMatrix(test_preds_rotf, test_set$LUNG_CANCER, positive = "Yes")
+print(conf_matrix_rot)
 ```
 
 # AdaBoostM1
@@ -929,7 +958,7 @@ adaboost_model <- boosting(
 adaboost_pred_obj <- predict.boosting(adaboost_model, newdata = test_set)
 
 # 3. Extract positive class probabilities safely by column index
-pos_class_index <- which(levels(test_set$LUNG_CANCER) == positive_class)
+pos_class_index <- which(levels(test_set$LUNG_CANCER) == "Yes")
 prob_adaboost   <- adaboost_pred_obj$prob[, pos_class_index]
 
 # 4. Generate hard class predictions & confusion matrix
@@ -938,7 +967,7 @@ conf_matrix_adaboost <- confusionMatrix(adaboost_preds, test_set$LUNG_CANCER)
 print(conf_matrix_adaboost)
 ```
 
-# NEW: Multilayer Perceptron (MLP)
+# Multilayer Perceptron (MLP)
 
 ```{r}
 # 1. Train MLP Model
@@ -964,65 +993,134 @@ print(conf_matrix_mlp)
 # ROC Curve
 
 ```{r}
-# 1. Define positive class label (e.g., "YES")
-positive_class <- levels(test_set$LUNG_CANCER)[2]
+library(pROC)
 
-# 2. Extract predicted probabilities for the positive class
-prob_nb  <- predict(nb_model, newdata = test_set_nb, type = "prob")[, positive_class]
+positive_class <- "Yes"
 
-# BayesNet (bnlearn)
+prob_nb       <- predict(nb_model,  newdata = test_set, type = "prob")[, positive_class]
+prob_sgd      <- predict(sgd_model, newdata = test_set, type = "prob")[, positive_class]
+prob_svm      <- predict(svm_model, newdata = test_set, type = "prob")[, positive_class]
+prob_lr       <- predict(lr_model,  newdata = test_set, type = "prob")[, positive_class]
+prob_ann      <- predict(ann_model, newdata = test_set, type = "prob")[, positive_class]
+prob_knn      <- predict(knn_model, newdata = test_set, type = "prob")[, positive_class]
+prob_dt       <- predict(dt_model,  newdata = test_set, type = "prob")[, positive_class]
+prob_rf       <- predict(rf_model,  newdata = test_set, type = "prob")[, positive_class]
+prob_rt       <- predict(rt_model,  newdata = test_set, type = "prob")[, positive_class]
+prob_mlp      <- predict(mlp_model, newdata = test_set, type = "prob")[, positive_class]
+
+# For rotation forest
+prob_rotf     <- predict(final_rf,  as.data.frame(x_test_mat))
+if (is.matrix(prob_rotf)) {
+  prob_rotf <- prob_rotf[, 2]
+}
+
+# --- Model 1: AdaBoost ---
+# Find and generate predictions using the dedicated adabag method (Not caret predict)
+adaboost_pred_obj <- predict(adaboost_model, newdata = test_set)
+# Dynamically map the positive_class to the correct column in the prob matrix
+# (Works whether the column name is "Yes", "1", or another value)
+pos_class_index <- which(colnames(adaboost_pred_obj$prob) == positive_class)
+# Fallback in case levels mismatch (e.g. searching for 'Yes' but matrix labeled '1')
+if(length(pos_class_index) == 0) {
+    # Assume 2nd column as standard binary target if label isn't found
+    pos_class_index <- 2 
+}
+prob_adaboost <- adaboost_pred_obj$prob[, pos_class_index]
+
+# --- Model 2: BayesNet (bnlearn) ---
 prob_bn_raw <- predict(bn_final, node = "LUNG_CANCER", data = test_bn, prob = TRUE)
-prob_bn     <- attr(prob_bn_raw, "prob")[positive_class, ]
+if (!is.null(attr(prob_bn_raw, "prob"))) {
+  prob_bn <- attr(prob_bn_raw, "prob")[positive_class, ]
+} else {
+  # Fallback if attribute wasn't populated or predictions were discrete classes
+  prob_bn <- as.numeric(prob_bn_raw == positive_class)
+}
 
-prob_sgd <- predict(sgd_model, newdata = test_set, type = "prob")[, positive_class]
-prob_svm <- predict(svm_model, newdata = test_set, type = "prob")[, positive_class]
-prob_lr  <- predict(lr_model,  newdata = test_set, type = "prob")[, positive_class]
-prob_ann <- predict(ann_model, newdata = test_set, type = "prob")[, positive_class]
-prob_knn <- predict(knn_model, newdata = test_set, type = "prob")[, positive_class]
-prob_dt  <- predict(dt_model,  newdata = test_set, type = "prob")[, positive_class]
-prob_lmt <- predict(lmt_model, newdata = test_set, type = "response")
-prob_rf <- predict(rf_model, newdata = test_set, type = "prob")[, positive_class]
-prob_rt <- predict(rt_model, newdata = test_set, type = "prob")[, positive_class]
-prob_mlp <- predict(mlp_model, newdata = test_set, type = "prob")[, positive_class]
+# --- Model 3: Logistic Model Tree (glmtree / LMT) ---
+if (inherits(final_lmt, "train")) {
+  # If trained via caret custom method
+  prob_lmt <- predict(final_lmt, newdata = test_set, type = "prob")[, positive_class]
+} else {
+  # If trained directly via partykit::glmtree
+  prob_lmt <- as.numeric(predict(final_lmt, newdata = test_set, type = "response"))
+}
 
-# 3. Calculate pROC objects
-roc_nb  <- roc(test_set$LUNG_CANCER, prob_nb,  levels = levels(test_set$LUNG_CANCER))
-roc_bn  <- roc(test_set$LUNG_CANCER, prob_bn,  levels = levels(test_set$LUNG_CANCER))
-roc_sgd <- roc(test_set$LUNG_CANCER, prob_sgd, levels = levels(test_set$LUNG_CANCER))
-roc_svm <- roc(test_set$LUNG_CANCER, prob_svm, levels = levels(test_set$LUNG_CANCER))
-roc_lr  <- roc(test_set$LUNG_CANCER, prob_lr,  levels = levels(test_set$LUNG_CANCER))
-roc_ann <- roc(test_set$LUNG_CANCER, prob_ann, levels = levels(test_set$LUNG_CANCER))
-roc_knn <- roc(test_set$LUNG_CANCER, prob_knn, levels = levels(test_set$LUNG_CANCER))
-roc_dt  <- roc(test_set$LUNG_CANCER, prob_dt,  levels = levels(test_set$LUNG_CANCER))
-roc_lmt <- roc(test_set$LUNG_CANCER, prob_lmt, levels = levels(test_set$LUNG_CANCER))
-roc_rf <- roc(test_set$LUNG_CANCER, prob_rf, levels = levels(test_set$LUNG_CANCER))
-roc_rt <- roc(test_set$LUNG_CANCER, prob_rt, levels = levels(test_set$LUNG_CANCER))
-roc_rotf <- roc(test_set$LUNG_CANCER, prob_rotf, levels = levels(test_set$LUNG_CANCER))
-roc_adaboost <- roc(test_set$LUNG_CANCER, prob_adaboost, levels = levels(test_set$LUNG_CANCER))
-roc_mlp <- roc(test_set$LUNG_CANCER, prob_mlp, levels = levels(test_set$LUNG_CANCER))
+# ---------------------------------------------------------
+# 3. Calculate pROC Objects
+# ---------------------------------------------------------
+target_levels <- levels(test_set$LUNG_CANCER)
 
-# 4. Plot Overlaying ROC Curves
-plot(roc_nb,  col = "red",         main = "ROC Curves Comparison across Models", legacy.axes = TRUE)
-plot(roc_bn,  col = "blue",        add = TRUE)
-plot(roc_sgd, col = "green",       add = TRUE)
-plot(roc_svm, col = "purple",      add = TRUE)
-plot(roc_lr,  col = "orange",      add = TRUE)
-plot(roc_ann, col = "brown",       add = TRUE)
-plot(roc_knn, col = "pink",        add = TRUE)
-plot(roc_dt,  col = "darkcyan",    add = TRUE)
-plot(roc_lmt,  col = "darkgreen",   add = TRUE)
-plot(roc_rf,  col = "lightgreen",   add = TRUE)
-plot(roc_rt,  col = "maroon",   add = TRUE)
-plot(roc_rotf,  col = "black",   add = TRUE)
-plot(roc_adaboost,  col = "darkblue",   add = TRUE)
-plot(roc_mlp,  col = "cyan",   add = TRUE)
+roc_nb       <- roc(test_set$LUNG_CANCER, prob_nb,       levels = target_levels)
+roc_bn       <- roc(test_set$LUNG_CANCER, prob_bn,       levels = target_levels)
+roc_sgd      <- roc(test_set$LUNG_CANCER, prob_sgd,      levels = target_levels)
+roc_svm      <- roc(test_set$LUNG_CANCER, prob_svm,      levels = target_levels)
+roc_lr       <- roc(test_set$LUNG_CANCER, prob_lr,       levels = target_levels)
+roc_ann      <- roc(test_set$LUNG_CANCER, prob_ann,      levels = target_levels)
+roc_knn      <- roc(test_set$LUNG_CANCER, prob_knn,      levels = target_levels)
+roc_dt       <- roc(test_set$LUNG_CANCER, prob_dt,       levels = target_levels)
+roc_lmt      <- roc(test_set$LUNG_CANCER, prob_lmt,      levels = target_levels)
+roc_rf       <- roc(test_set$LUNG_CANCER, prob_rf,       levels = target_levels)
+roc_rt       <- roc(test_set$LUNG_CANCER, prob_rt,       levels = target_levels)
+roc_rotf     <- roc(test_set$LUNG_CANCER, prob_rotf,     levels = target_levels)
+roc_adaboost <- roc(test_set$LUNG_CANCER, prob_adaboost, levels = target_levels)
+roc_mlp      <- roc(test_set$LUNG_CANCER, prob_mlp,      levels = target_levels)
 
-# Add Legend with Model Names
-legend("bottomright", 
-       legend = c("Naive Bayes", "BayesNet", "SGD", "Linear SVM", 
-                  "Logistic Regression", "ANN", "KNN", "Decision Tree", "LMT", "Random Forest", "Random Tree", "Rotation Forest", "Adaboost", "MLP"),
-       col = c("red", "blue", "green", "purple", "orange", "brown", "pink", "darkcyan", "darkgreen", "lightgreen", "maroon", "black", "darkblue", "cyan"), 
-       lwd = 2, cex = 0.8)
+# ---------------------------------------------------------
+# 4. Plot Overlaying ROC Curves with AUC in Legend
+# ---------------------------------------------------------
+# Prepare model list, colors, and line widths
+models <- list(
+  "Naive Bayes"        = roc_nb,
+  "BayesNet"           = roc_bn,
+  "SGD"                = roc_sgd,
+  "Linear SVM"         = roc_svm,
+  "Logistic Reg."      = roc_lr,
+  "ANN"                = roc_ann,
+  "KNN"                = roc_knn,
+  "Decision Tree"      = roc_dt,
+  "LMT"                = roc_lmt,
+  "Random Forest"      = roc_rf,
+  "Random Tree"        = roc_rt,
+  "Rotation Forest"    = roc_rotf,
+  "AdaBoost"           = roc_adaboost,
+  "MLP"                = roc_mlp
+)
+
+colors <- c(
+  "red", "blue", "green3", "purple", "orange", 
+  "brown", "hotpink", "darkcyan", "darkgreen", 
+  "chartreuse4", "maroon", "black", "navy", "cyan3"
+)
+
+# Base canvas with first model
+plot(
+  roc_nb, 
+  col = colors[1], 
+  lwd = 2, 
+  legacy.axes = TRUE,
+  main = "ROC Curves Comparison Across Models",
+  xlab = "False Positive Rate (1 - Specificity)",
+  ylab = "True Positive Rate (Sensitivity)"
+)
+
+# Add remaining models
+for (i in 2:length(models)) {
+  plot(models[[i]], col = colors[i], lwd = 2, add = TRUE)
+}
+
+# Construct legend with AUC scores
+auc_labels <- sapply(names(models), function(m) {
+  sprintf("%s (AUC = %.3f)", m, as.numeric(models[[m]]$auc))
+})
+
+legend(
+  "bottomright",
+  legend = auc_labels,
+  col = colors,
+  lwd = 2,
+  cex = 0.65,
+  bty = "n"
+)
 ```
 
 
@@ -1054,6 +1152,30 @@ get_metrics <- function(predictions, actual, pos_class) {
 
 # --- Compile Predictions from All Models ---
 # Assumes each model's predicted class factor vector is stored from earlier steps:
+# Correct "Naive Bayes" test prediction
+nb_preds <- predict(nb_model, newdata = test_set)
+
+# Set predictions to the proper format
+target_levels <- levels(test_set$LUNG_CANCER) # e.g., c("No", "Yes")
+
+# Robust mapper to align all predictions to the exact reference levels
+align_to_reference <- function(preds, ref_levels) {
+  # Convert to character first to safely examine values
+  preds_char <- as.character(preds)
+  
+  # Check if predictions are 0/1 while reference is No/Yes
+  if (all(preds_char %in% c("0", "1", NA)) && all(ref_levels %in% c("No", "Yes"))) {
+    preds_char <- ifelse(preds_char == "1", "Yes", "No")
+  }
+  # Check if predictions are No/Yes while reference is 0/1
+  else if (all(preds_char %in% c("No", "Yes", NA)) && all(ref_levels %in% c("0", "1"))) {
+    preds_char <- ifelse(preds_char == "Yes", "1", "0")
+  }
+  
+  # Return factor with identical level structure
+  factor(preds_char, levels = ref_levels)
+}
+
 models_preds <- list(
   "Naive Bayes"         = nb_preds,
   "BayesNet"            = bn_preds,
@@ -1066,20 +1188,32 @@ models_preds <- list(
   "Random Forest"       = rf_preds,
   "Random Tree"         = rt_preds,
   "REPTree"             = reptree_preds,
-  "LMT (glmtree)"       = lmt_preds,
-  "Rotation Forest"     = rotf_preds,
+  "LMT (glmtree)"       = test_preds_lmt,
+  "Rotation Forest"     = test_preds_rotf,
   "AdaBoost.M1"         = adaboost_preds,
   "ML Perceptron"       = mlp_preds
 )
 
-# Build metrics matrix
-results_list <- lapply(models_preds, function(preds) {
-  get_metrics(preds, test_set$LUNG_CANCER, pos_class = positive_class)
+# Standardize all model prediction vectors to the reference levels
+models_preds_clean <- lapply(models_preds, function(p) {
+  align_to_reference(p, ref_levels = target_levels)
 })
 
+# Make sure pos_class matches an existing level in test_set
+pos_class <- if ("Yes" %in% target_levels) "Yes" else target_levels[2]
+
+# Compute metrics safely
+results_list <- lapply(models_preds_clean, function(preds) {
+  get_metrics(preds, test_set$LUNG_CANCER, pos_class = pos_class)
+})
+
+results_df <- do.call(rbind, results_list)
+print(results_df)
+```
+
+```{r}
 # Convert list to Data Frame
-benchmark_df <- do.call(rbind, results_list) %>%
-  as.data.frame() %>%
+results_df <- data.frame(results_df) %>%
   tibble::rownames_to_column(var = "Model") %>%
   mutate(
     Accuracy  = round(Accuracy, 4),
@@ -1090,7 +1224,7 @@ benchmark_df <- do.call(rbind, results_list) %>%
 
 # Render formatted HTML/Markdown table
 kable_table <- kable(
-  benchmark_df,
+  results_df,
   caption = "<b>Performance Summary across Machine Learning Models</b>",
   col.names = c("Model", "Accuracy", "Precision", "Recall"),
   align = c("l", "c", "c", "c")

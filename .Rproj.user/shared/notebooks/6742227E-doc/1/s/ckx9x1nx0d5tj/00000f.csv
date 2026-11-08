@@ -1,0 +1,4 @@
+"0","# For submission"
+"0","write.csv(train_set, ""training.csv"")"
+"0","write.csv(test_set, ""testing.csv"")"
+"0","write.csv(validation_set, ""validation.csv"")"

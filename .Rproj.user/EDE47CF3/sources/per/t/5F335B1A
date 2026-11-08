@@ -1,0 +1,28 @@
+{
+    "id": "5F335B1A",
+    "path": "~/GitHub/ds340w_parentpaper1_mbao/data_preprocessing.Rmd",
+    "project_path": "data_preprocessing.Rmd",
+    "type": "r_markdown",
+    "hash": "3670469513",
+    "contents": "",
+    "dirty": false,
+    "created": 1793999542876.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "tempName": "Untitled1",
+        "chunk_output_type": "inline",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "23,6",
+        "scrollLine": "18"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1794159161,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1794159161117,
+    "read_only": false,
+    "read_only_alternatives": []
+}
