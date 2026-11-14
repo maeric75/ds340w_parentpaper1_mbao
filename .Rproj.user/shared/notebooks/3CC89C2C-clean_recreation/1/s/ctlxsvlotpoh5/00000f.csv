@@ -1,0 +1,6 @@
+"0","# Forward elimination"
+"0","forwards_elim <- stats::step(object = base_model,"
+"0","                             scope = list(lower = base_model, upper = full_model),"
+"0","                             data = model_data,"
+"0","                             direction = ""forward"","
+"0","                             trace = 0)"

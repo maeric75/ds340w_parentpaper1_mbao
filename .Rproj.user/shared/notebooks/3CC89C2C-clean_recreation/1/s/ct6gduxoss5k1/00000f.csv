@@ -1,0 +1,7 @@
+"0","library(stats)"
+"0",""
+"0","# Base model with only intercept"
+"0","base_model <- glm(LUNG_CANCER ~ 1, family = binomial, data = model_data)"
+"0",""
+"0","# Full model with all potential predictors"
+"0","full_model <- glm(LUNG_CANCER ~ ., family = binomial, data = model_data)"

@@ -1,0 +1,7 @@
+"0","# Backwards elimination"
+"0","backwards_elim <- stats::step(object = full_model,"
+"0","                              scope = formula(full_model),"
+"0","                              data = model_data,"
+"0","                              direction = ""backward"","
+"0","                              trace = 0)"
+"0",""

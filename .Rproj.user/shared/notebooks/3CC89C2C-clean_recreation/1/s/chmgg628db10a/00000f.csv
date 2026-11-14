@@ -1,0 +1,3 @@
+"0","kable(feature_rankings, "
+"0","      col.names = c(""Feature"", ""Random Forest Score"", ""Gain Ratio Score"", ""Forwards Selection"", ""Backwards Selection""),"
+"0","      align = c(""l"", ""c"", ""c"", ""c"", ""c""))"

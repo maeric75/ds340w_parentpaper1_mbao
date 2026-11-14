@@ -1,0 +1,7 @@
+"0","# 1 (Yes) or 0 (No): Were the variables from Gain Ratio table chosen by each selection model?"
+"0","forwards_chosen  <- c(""Yes"", ""Yes"", ""Yes"", ""Yes"", ""No"", ""Yes"", ""No"", ""No"", ""No"", ""No"", ""No"")"
+"0","backwards_chosen <- c(""Yes"", ""Yes"", ""Yes"", ""Yes"", ""No"", ""Yes"", ""No"", ""No"", ""No"", ""No"", ""No"")"
+"0",""
+"0","feature_rankings <- feature_rankings %>%"
+"0","  mutate(ForwardSelect = forwards_chosen,"
+"0","         BackwardSelect = backwards_chosen)"

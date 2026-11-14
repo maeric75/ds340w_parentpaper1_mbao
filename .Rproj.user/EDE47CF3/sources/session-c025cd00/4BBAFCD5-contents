@@ -1,0 +1,430 @@
+---
+title: "Final Project"
+author: "Michael Ulis, Ayla Orona, Maeric Barrows"
+date: "2024-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Front Matter
+
+```{r, message=FALSE, warning=FALSE}
+# Refresh Environment
+remove(list = ls())
+
+# Packages
+library(tidyverse)
+library(gbm)
+library(ggplot2)
+library(randomForest)
+library(rattle)
+library(rpart)
+library(lubridate)
+library(kableExtra)
+
+# Datasets
+COD_P1 <- read.csv("CODGames_p1_380.csv")
+COD_P2 <- read.csv("CODGames_p2_380.csv")
+COD_maps <- read.csv("CODMaps.csv")
+COD_modes <- read.csv("CODGameModes.csv")
+
+COD <- full_join(COD_P1, COD_P2)
+```
+
+### Task 1: Data Cleaning and Visualization
+
+The goal of this task is to find maps which are the most likely to win the map vote. To do this, we have to fix the incorrect names in the Map1, Map2, and Choice columns, remove all matches where there were no maps to choose from in the Map1 and Map2 columns, distinguish between votes which resulted in a winner or a draw, find how many times each map was chosen, and create a plot based on our findings. We can get rid of the blanks in Map1 and Map2 by using mutate, na_if, and na.omit() to transform these blanks into NA and remove them. To fix the names, we will find all names in the Map1, Map2, and Choice columns that were not present in the correctly-spelled COD_maps table, and replace them with their correct versions by using a for loop and the gsub function. We can tell what votes resulted in a winner or a tie by looking at the MapVote column. We will split this column into separate columns for winning and losing votes. Since we are only dealing with votes which resulted in a winner, we can filter out all votes which tied. Finally, with all of our data in place, we can make a histogram showing how many times each map won the vote, and report our findings.
+
+First, we can tidy some of the data.
+```{r}
+# Choose appropriate columns
+COD_Q1 <- COD %>%
+  select(Map1, Map2, Choice, MapVote)
+
+# Get rid of blanks
+COD_Q1 <- COD_Q1 %>%
+  mutate_all(na_if,"") %>%
+  na.omit()
+
+# Get rid of trailing spaces
+COD_Q1 <- as.data.frame(lapply(COD_Q1, trimws))
+```
+
+Now that we've gotten rid of white space, we can find all the misspellings.
+```{r}
+# Find misspellings
+misspellings <- setdiff(c(COD_Q1$Map1, COD_Q1$Map2, COD_Q1$Choice), COD_maps$Name)
+misspellings
+```
+
+With all misspellings found, we can now replace the misspellings with their correct versions.
+
+```{r}
+# Create correct vector
+correct <- c("Rush", "Collateral Strike", "Raid", "Collateral Strike", "Miami Strike", "Collateral Strike", "Drive-In", "Deprogram", "Yamantau", "Nuketown '84", "Miami Strike", "Armada Strike", "Apocalypse", "Apocalypse", "Collateral Strike", "Diesel")
+
+# Change misspellings in Map1
+for (i in seq_along(misspellings)) {
+  COD_Q1$Map1 <- gsub(misspellings[i], correct[i], COD_Q1$Map1)
+}
+
+# Change misspellings in Map2
+for (i in seq_along(misspellings)) {
+  COD_Q1$Map2 <- gsub(misspellings[i], correct[i], COD_Q1$Map2)
+}
+
+# Change misspellings in Choice
+for (i in seq_along(misspellings)) {
+  COD_Q1$Choice <- gsub(misspellings[i], correct[i], COD_Q1$Choice)
+}
+```
+
+Some of the maps are still misspelled, so we will run this process one more time.
+
+```{r}
+miss_2 <- setdiff(c(COD_Q1$Map1, COD_Q1$Map2, COD_Q1$Choice), COD_maps$Name)
+miss_2
+```
+
+```{r}
+# Change misspellings in Map1
+for (i in seq_along(miss_2)) {
+ COD_Q1$Map1 <- gsub(miss_2[i], "Collateral Strike", COD_Q1$Map1)
+}
+
+for (i in seq_along(miss_2)) {
+ COD_Q1$Map2 <- gsub(miss_2[i], "Collateral Strike", COD_Q1$Map2)
+}
+
+for (i in seq_along(miss_2)) {
+ COD_Q1$Choice <- gsub(miss_2[i], "Collateral Strike", COD_Q1$Choice)
+}
+```
+
+The code below verifies that all of the names have been corrected (there are no names that are different from those in the COD_maps table).
+```{r}
+miss_3 <- setdiff(c(COD_Q1$Map1, COD_Q1$Map2, COD_Q1$Choice), COD_maps$Name)
+miss_3
+```
+Now, we can perform analysis. To find the proportion that each map showed up in Map1 and Map2, we can use these commands:
+
+```{r}
+COD_Q1 %>%
+  summarize(count=n()) # 674
+
+Map1_count <- COD_Q1 %>%
+  group_by(Map1) %>%
+  summarize(count=n())
+
+Map2_count <- COD_Q1 %>%
+  group_by(Map2) %>%
+  summarize(count=n())
+```
+
+Now, we can find the instances where the MapVote was a tie, and eliminate them.
+```{r}
+# Split MapVote and eliminate the tie votes
+COD_Q1 <- COD_Q1 %>%
+  separate_wider_delim(cols = MapVote, delim = " ", names = c("WinVote", "to", "LossVote")) %>%
+  filter(WinVote != LossVote)
+```
+
+All tie votes have been removed. Now, only maps that won a vote remain. We can now make the histogram to see which maps won the vote the most amount of times.
+```{r, warning=FALSE}
+ggplot(data = COD_Q1, mapping = aes(x = Choice)) +
+  geom_histogram(stat = "count", fill="navy") +
+  labs(x = "Map Choice", 
+       y = "Number of Times Map was Chosen", 
+       title = "Number of Times Each Map Was Selected",
+       subtitle = "Call of Duty") +
+  theme(
+    plot.title = element_text(size = 16L,
+                              face = "bold",
+                              hjust = 0.5),
+    plot.subtitle = element_text(size = 12L,
+                                 hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none")
+```
+
+We can show the proportions of how often each map was chosen by making this table:
+
+```{r}
+# Get total games
+COD_Q1 %>%
+  summarize(N=n()) # 571
+
+# Get proportions
+table_1 <- COD_Q1 %>%
+  group_by(Choice) %>%
+  summarize(N=n(),
+            proportion = N/571*100) %>%
+  arrange(desc(proportion))
+
+table_1 %>%
+  kable(
+    digits = 2,
+    format.args = list(big.mark = ","),
+    caption = "Summary Table for Map Choice in Call of Duty",
+    col.names = c("Map Choice", "Number of Times Map Was Chosen", "Proportion in Percent for Times that Map Was Chosen"),
+    align = c("l", rep("c", 2)),
+    booktabs = TRUE
+  ) %>%
+  kableExtra::kable_classic(lightable_options = "striped",
+                            latex_options = c("scale_down", "HOLD_position"))
+```
+From the graph and the table, we can tell that the Crossroads Strike map was chosen the most often, with 41 votes won, accounting for 7.18% of all votes won.
+
+### Task 2: Inference
+
+In Task #2, we are tasked with figuring out how the game type affects the total XP for the game accounting for the score. To do this, we need to compare the Score and TotalXP column with the GameType column, however, the GameType column has disorganized names, and needs to be tidied. Below is the code that standardizes the names featured in the column:
+```{r}
+COD$GameType[COD$GameType == "HC - Hardpoint"] <- "Hardpoint"
+COD$GameType[COD$GameType == "HC - Kill Confirmed"] <- "Kill Confirmed"
+COD$GameType[COD$GameType == "HC - TDM"] <- "Team Deathmatch"
+COD$GameType[COD$GameType == "HC - Domination"] <- "Domination"
+COD$GameType[COD$GameType == "TDM"] <- "Team Deathmatch"
+```
+
+In addition, we will need indicator variables to use as part of the model needed to answer this task's question. We tidy the data further and create these indicators here:
+```{r}
+COD_Q2 <- COD %>%
+  select(TotalXP, Score, GameType)
+
+COD_Q2 <- na.omit(COD_Q2)
+
+COD_Q2 <- COD_Q2 %>%
+  mutate(is_TDM = ifelse(GameType == "Team Deathmatch", 1, 0),
+         is_KC = ifelse(GameType == "Kill Confirmed", 1, 0),
+         is_D = ifelse(GameType == "Domination", 1, 0),
+         is_H = ifelse(GameType == "Hardpoint", 1, 0))
+```
+
+Next, we create a scatter plot showing the relationship between Score and Total XP, with each color indicating a different game type.
+```{r, warning=FALSE}
+ggplot(data = COD, mapping = aes(x= Score, y = TotalXP)) +
+  geom_point(aes(color = GameType)) +
+  labs(x = "Player Score", 
+       y = "Total XP Gained", 
+       title = "Relationship Between Score and Total XP by Game Type",
+       subtitle = "Call of Duty") +
+  theme(
+    plot.title = element_text(size = 16L,
+                              face = "bold",
+                              hjust = 0.5),
+    plot.subtitle = element_text(size = 12L,
+                                 hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.position = "right")
+```
+
+This plot shows the general trend that Score increases as Total XP increases. Even though we indicate GameType by color, this graph does not adequately show the relationship when considering the different game types. We can split the plot into four separate visualizations, each showing the relationship with respect to each game type, which we do below:
+
+```{r, warning=FALSE}
+ggplot(data = COD, mapping = aes(x= Score, y = TotalXP, color = GameType)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(GameType~.) +
+  labs(x = "Player Score", 
+       y = "Total XP Gained", 
+       title = "Relationship Between Score and Total XP by Game Type",
+       subtitle = "Call of Duty") +
+  theme(
+    plot.title = element_text(size = 16L,
+                              face = "bold",
+                              hjust = 0.25),
+    plot.subtitle = element_text(size = 12L,
+                                 hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.position = "right")
+```
+
+This plot better shows the trend between Score and Total XP as it relates to Game Type. We see the same trend occur as before, that Score increases as Total XP increases. With the plot split up, we can now see that some Game Types result in higher Scores and Total XP than others. The Hardpoint and Team Deathmatch modes can result in higher scores, while the Domination and Kill Confirmed modes typically result in lower ones.
+
+To further illustrate the relationship between GameType and Total XP after accounting for Score, we can create the linear regression model seen below.
+```{r}
+xvars <- c("TotalXP", "Score", "is_TDM", "is_KC", "is_H", "is_D")
+COD_Q2[, xvars] <- scale(COD_Q2[, xvars], center = TRUE, scale = TRUE)
+
+set.seed(123)
+train_ind <- sample(1:nrow(COD_Q2), nrow(COD_Q2), floor(0.8* nrow(COD_Q2)))
+set.seed(NULL)
+
+Train <- COD_Q2[train_ind, ]
+Test <- COD_Q2[-train_ind, ]
+
+lin_reg <- lm(TotalXP ~ Score + is_TDM + is_KC + is_H, data = Train)
+```
+
+```{r}
+summary(lin_reg)
+
+yhat <- predict(lin_reg, newdata = Test)
+
+MSE1 <- mean((Test$TotalXP - yhat)^2)
+RMSE1 <- sqrt(MSE1)
+MSE1
+RMSE1
+```
+The equation for this model is: TotalXP = 0.479(Score) - 0.118(is_TDM) - 0.044(is_KC) + 0.112(is_H) - 0.009
+
+The above summary table shows that the R squared of this model is 0.3264. The Residual Standard Error is 0.8007. Typically, we want to maximize the R squared and minimize the standard error. With these results we can conclude the model should be modified in the future.
+
+If a game is a Team Deathmatch round, Total XP is expected to increase by 0.352. If it's a Kill Confirmed match, Total XP is expected to increase by 0.426. If the match is a Hardpoint match, Total XP is expected to increase by 0.582. If it is none of these, and instead is a Domination match, Total XP should increase by 0.470.
+
+### Task 3: Prediction
+
+For our prediction task, we decided to make models which predict whether a player wins or not based on their eliminations, deaths, damage, and score.
+
+## Tidying Data
+
+For our data tidying, we create the Win indicator variable, chose what columns we needed, removed NA from our table, and performed the training and validation split.
+
+```{r, warning=FALSE}
+#create wins column
+CODWins <- COD %>%
+  separate(Result, c("YourScore", "OtherScore")) %>%
+  mutate(Win = ifelse(YourScore > OtherScore, 1, 0))
+```
+
+```{r}
+selected_columns <- c("Win", "Eliminations", "Deaths", "Damage", "Score")
+CODForest <- CODWins[ ,selected_columns, drop=FALSE]
+CODForest <- na.omit(CODForest)
+```
+
+```{r}
+#Prepare data with training testing split
+set.seed(123)
+trainInd <- sample(1:nrow(CODForest), floor(0.8 * nrow(CODForest)))
+set.seed(NULL)
+
+Train <- CODForest[trainInd, ]
+Validation <- CODForest[-trainInd, ]
+```
+
+## Random Forest
+
+Our first classification method was the random forest. First, we created our random forest model by predicting wins by all the columns we made in the CODForest table (Eliminations, Deaths, Damage, and Score).
+
+```{r}
+#Build random Forest
+set.seed(123)
+rfModel <- randomForest(as.factor(Win) ~ ., data = Train, ntree = 500, mtry = 3)
+set.seed(NULL)
+plot(rfModel)
+```
+
+We obtained the predicted probabilities for each observation set in the validation data in the predProb call. It returns the probability of a loss and a win for each set. The call predWins gives us the predicted class labels directly. For example, index 1 is classified as a loss while index 25 is classified as a win. Both of these calls helps us understand how the probabilities are being calculated for each validation data set. 
+
+```{r}
+#Obtain Predicted Probabilities
+predProb <- predict(rfModel, newdata = Validation,
+                    type = "prob")
+head(predProb)
+
+predWins <- predict(rfModel, newdata = Validation, type = "class")
+head(predWins)
+
+```
+
+The confusion matrix determines the accuracy of predictions. The confusion matrix below determines how many wins and losses predicted were correct and those that were not correct. In this case, since we are predicting wins with a classification model, 0 represents losses and 1 represents wins. 52 losses were predicted correctly and 44 wins were predicted correctly. 27 losses were predicting incorrectly and 39 wins were predicted incorrectly. We also calculated the mean accuracy of predictions made by predWins compared to the actual wins in Validation$Win.
+
+```{r}
+#Confusion Matrix, Fix Too Long
+table(predWins, Validation$Win)
+
+#calculate accuracy
+mean(predWins == Validation$Win)
+
+```
+
+This line of code also creates the models confusion matrix, however, it takes into account the cutoffs and any internal thresholds. Using both of these confusion matrices gives us an idea of how well the model performs overall. As seen in the data below, 226 losses are predicted accurately as well as 148 wins. 148 losses were predicted inaccurately as well as 124 wins.  
+
+```{r}
+rfModel$confusion
+```
+
+We also found the importance values to find out which variables are important for the predictive model. This helps us understand how removing a variable decreases accuracy and vice versa.
+
+```{r}
+#Find Importance Values
+rfModel$importance
+```
+
+Finally, we plotted the importance variables of our model. We can see the top two most important are Score and Damage. 
+
+```{r}
+#Plot Importance
+varImpPlot(rfModel, n.var = 4)
+```
+
+## Forward Elimination
+
+The second method we chose to measure wins based on eliminations, deaths, damage, and score is froward elimination. In this model, we built an intercept only model along with a model that uses all the variables in order to perform forward elimination.
+
+```{r}
+#Build Intercept Only Model. NOTE: ~ 1 tells R that you only want an intercept
+int_only_model <- glm(Win ~ 1, family = binomial, data = Train)
+
+#Build model with all potential regressors. 
+#In code below, Win ~ . tells R to use all columns in dataset to predict Win
+full_model <- glm(Win ~ ., family = binomial, data = Train)
+
+#Perform forward elimination
+#Have R do it all
+FEmodel <- stats::step(object = int_only_model, 
+            scope = list(lower = int_only_model, upper = full_model),
+            data = Train,
+            direction = "forward")
+```
+
+As seen in these results, the best model for predicting wins is: Win ~ Deaths + Eliminations + Damage + Score. The most important variables are Deaths and Eliminations because they have the highest absolute value compared to the other variables.
+
+
+We then found out the accuracy of this forward elimination model so we can compare the models in the future.
+```{r}
+predictions <- predict(FEmodel, newdata = Validation, type = "response")
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+
+accuracy <- mean(predicted_classes == Validation$Win)
+print(accuracy)
+```
+
+
+## Boosting
+
+Finally, we chose the boosting technique as our last classification model. Unlike other classification methods, which rely on a random training and testing split to get good outcomes, boosting performs classification sequentially. The process of boosting involves creating trees, then growing the next tree based on information from all previous trees. Because this technique does not involve random splitting, we will use the CODForest dataset for our boosting model. 
+
+Some choices in our boosting model need to be clarified. We used Bernoulli distribution because this is the setting in the gbm function for binary classification. "interaction.depth" is the depth that each tree the model makes will be. We chose 4 because, in boosting, more shallow trees actually perform better than deep ones.
+```{r}
+set.seed(123)
+boost_win <- gbm(Win ~., data = CODForest, distribution = "bernoulli", n.trees = 500, interaction.depth = 4)
+summary(boost_win)
+```
+
+Using the table and the provided graph, the boosting technique shows that Damage and Score are the most important variables to predict whether a player wins or not.
+
+Like forward elimination we calculated the accuracy of the boosting model so we can compare the three models. 
+```{r}
+predictions <- predict.gbm(boost_win, newdata = CODForest, n.trees = 500, type = "response")
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+
+accuracy <- mean(predicted_classes == CODForest$Win)
+print(accuracy)
+```
+
+### Final Comparisons
+
+One thing all these models have in common is that they all determine the most important variables. In the random forest model, the top two most important variables were score and damage. The boosting model also has the most important models as damage and score. However, forward elimination returns that the most important variables are deaths and eliminations. In terms of accuracy, the boosting model is the best out of the three models. Boosting had an accuracy of 0.88 while forest had an confusion matrix accuracy of 0.59 and forward elimination had an accuracy of 0.56. Boosting is the best model for finding the most important variables to predict winning, and should be used in the future. 
+
+### Group Contributions
+
+Like last time, our team evenly split the work for this project. Maeric worked on Task 1 and the boosting in Task 3. Michael did Task 2 and the forward elimination in Task 3. Ayla did the random forest model in Task 3 and the majority of the writing parts.

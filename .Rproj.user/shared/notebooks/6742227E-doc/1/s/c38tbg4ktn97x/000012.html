@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<style>body{background-color:white;}</style>
+<script src="lib/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="lib/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="lib/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="lib/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="lib/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="lib/kePrint-0.0.1/kePrint.js"></script>
+<link href="lib/lightable-0.0.1/lightable.css" rel="stylesheet" />
+
+</head>
+<body>
+<table class="table" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>Table 2. The distribution of participants in terms of feature values and class label in the balanced data.</caption>
+ <thead>
+  <tr>
+   <th style="text-align:center;"> Feature </th>
+   <th style="text-align:center;"> Value </th>
+   <th style="text-align:center;"> No </th>
+   <th style="text-align:center;"> Yes </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> COPD </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 64.64 </td>
+   <td style="text-align:center;"> 12.41 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 8.99 </td>
+   <td style="text-align:center;"> 13.97 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> ASTHMA </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 62.93 </td>
+   <td style="text-align:center;"> 20.36 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 10.70 </td>
+   <td style="text-align:center;"> 6.02 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> SMOKER </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 41.68 </td>
+   <td style="text-align:center;"> 4.90 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 31.95 </td>
+   <td style="text-align:center;"> 21.47 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="5"> AGE_GROUP </td>
+   <td style="text-align:center;"> 25-34 </td>
+   <td style="text-align:center;"> 0.45 </td>
+   <td style="text-align:center;"> 0.15 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> 35-44 </td>
+   <td style="text-align:center;"> 0.15 </td>
+   <td style="text-align:center;"> 0.07 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> 45-54 </td>
+   <td style="text-align:center;"> 1.04 </td>
+   <td style="text-align:center;"> 0.37 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> 55-64 </td>
+   <td style="text-align:center;"> 15.30 </td>
+   <td style="text-align:center;"> 5.27 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> 65+ </td>
+   <td style="text-align:center;"> 56.69 </td>
+   <td style="text-align:center;"> 20.51 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> GENDER </td>
+   <td style="text-align:center;"> Female </td>
+   <td style="text-align:center;"> 48.14 </td>
+   <td style="text-align:center;"> 17.16 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Male </td>
+   <td style="text-align:center;"> 25.48 </td>
+   <td style="text-align:center;"> 9.21 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> EXERCISE </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 21.99 </td>
+   <td style="text-align:center;"> 12.63 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 51.63 </td>
+   <td style="text-align:center;"> 13.74 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> SMOKE100 </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 41.68 </td>
+   <td style="text-align:center;"> 4.90 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 31.95 </td>
+   <td style="text-align:center;"> 21.47 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> ECIGS </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 72.59 </td>
+   <td style="text-align:center;"> 25.63 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 1.04 </td>
+   <td style="text-align:center;"> 0.74 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> SMOKELESS_TOBACCO </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 72.51 </td>
+   <td style="text-align:center;"> 26.08 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 1.11 </td>
+   <td style="text-align:center;"> 0.30 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;vertical-align: top !important;" rowspan="2"> COVID19 </td>
+   <td style="text-align:center;"> No </td>
+   <td style="text-align:center;"> 40.19 </td>
+   <td style="text-align:center;"> 15.60 </td>
+  </tr>
+  <tr>
+   
+   <td style="text-align:center;"> Yes </td>
+   <td style="text-align:center;"> 33.43 </td>
+   <td style="text-align:center;"> 10.77 </td>
+  </tr>
+</tbody>
+</table> <script type="text/x-mathjax-config">MathJax.Hub.Config({tex2jax: {inlineMath: [["$","$"]]}})</script><script async src="https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</body>
+</html>
