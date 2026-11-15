@@ -3,15 +3,17 @@
     "path": "~/STAT380_FinalProject/UlisM_OronaA_BarrowsM_FP.Rmd",
     "project_path": null,
     "type": "r_markdown",
-    "hash": "3993430679",
+    "hash": "0",
     "contents": "",
     "dirty": false,
     "created": 1794420307846.0,
     "source_on_save": false,
-    "relative_order": 7,
+    "relative_order": 9,
     "properties": {
         "source_window_id": "",
-        "Source": "Source"
+        "Source": "Source",
+        "cursorPosition": "429,256",
+        "scrollLine": "413"
     },
     "folds": "",
     "lastKnownWriteTime": 1714757176,

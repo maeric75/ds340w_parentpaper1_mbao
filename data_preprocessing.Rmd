@@ -156,7 +156,7 @@ clean_df <- select_data %>%
 
 ```{r}
 # Obtain non-cancer observations through MatchIt
-# Addresses class difference before cross validation, we will likely still need SMOTE
+# Addresses class difference before cross validation
 
 library(MatchIt)
 set.seed(123)

@@ -218,8 +218,7 @@ full_model <- glm(LUNG_CANCER ~ ., family = binomial, data = model_data)
 forwards_elim <- stats::step(object = base_model,
                              scope = list(lower = base_model, upper = full_model),
                              data = model_data,
-                             direction = "forward",
-                             trace = 0)
+                             direction = "forward")
 ```
 
 ```{r}
@@ -951,6 +950,10 @@ mlp_preds <- predict(mlp_model, newdata = test_set)
 conf_matrix_mlp <- confusionMatrix(mlp_preds, test_set$LUNG_CANCER)
 print(conf_matrix_mlp)
 ```
+
+## Majority Voting
+
+## Stacking
 
 ## ROC Curve
 
