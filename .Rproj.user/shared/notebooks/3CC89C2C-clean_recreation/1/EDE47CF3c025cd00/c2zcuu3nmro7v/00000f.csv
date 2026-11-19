@@ -1,0 +1,6 @@
+"0","set.seed(123)"
+"0",""
+"0","split <- sample(c(TRUE, FALSE), nrow(selected_data), replace=TRUE, prob=c(0.75, 0.25))"
+"0",""
+"0","train_set <- model_data[split, ]"
+"0","test_set <- model_data[!split, ]"

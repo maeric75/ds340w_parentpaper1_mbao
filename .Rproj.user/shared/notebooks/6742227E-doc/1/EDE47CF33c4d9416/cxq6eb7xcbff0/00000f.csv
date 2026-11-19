@@ -1,0 +1,6 @@
+"0","# SMOKE100 is, for the purposes of modeling, the same variable as SMOKER"
+"0","# BMI plays directly into height and weight, removing HEIGHT and WEIGHT as well"
+"0","model_data <- lung_cancer %>%"
+"0","  select(!SMOKE100) %>%"
+"0","  select(!HEIGHT) %>%"
+"0","  select(!WEIGHT)"

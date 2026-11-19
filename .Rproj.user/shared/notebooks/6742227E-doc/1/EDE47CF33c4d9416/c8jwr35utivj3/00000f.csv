@@ -1,0 +1,2 @@
+"0","selected_data <- model_data %>%"
+"0","  select(LUNG_CANCER, COPD, SMOKER, POOR_PHYS_DAYS, BMI, EXERCISE)"

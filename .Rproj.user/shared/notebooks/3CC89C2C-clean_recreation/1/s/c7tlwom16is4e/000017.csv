@@ -1,0 +1,5 @@
+"0","library(ggcorrplot)"
+"0",""
+"0","model.matrix(~0+., data=lung_cancer %>% select(!AGE_GROUP)) %>% "
+"0","  cor(use=""pairwise.complete.obs"") %>% "
+"0","  ggcorrplot(show.diag=FALSE, type=""lower"", lab=TRUE, lab_size=1.5)"

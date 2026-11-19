@@ -1,0 +1,7 @@
+"0","# --- INITIAL DATA CLEANING ---"
+"0","lung_cancer <- lung_cancer %>%"
+"0","  select(!X) %>% # Remove column number from download"
+"0","  select(!SEQNO) %>% # Remove observation ID"
+"0","  mutate(GENDER = ifelse(GENDER == ""Male"", 1, 0), # Change gender to binary feature"
+"0","         LUNG_CANCER = as.factor(ifelse(LUNG_CANCER == 1, ""Yes"", ""No"")), # Change lung cancer indicator to Yes/No for models"
+"0","         AGE_GROUP = as.factor(AGE_GROUP)) # Change age group indicator to factor "

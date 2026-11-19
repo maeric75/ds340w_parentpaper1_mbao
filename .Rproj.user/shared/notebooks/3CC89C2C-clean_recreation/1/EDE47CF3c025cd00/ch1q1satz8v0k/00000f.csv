@@ -1,0 +1,5 @@
+"0","# --- OBTAIN LUNG CANCER PREVALENCE BY AGE GROUP ---"
+"0","age_group_pct <- lung_cancer %>%"
+"0","  group_by(AGE_GROUP, LUNG_CANCER) %>%"
+"0","  summarize(Count = n(),"
+"0","            Ratio = Count / nrow(lung_cancer))"

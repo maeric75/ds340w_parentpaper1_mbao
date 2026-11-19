@@ -1,0 +1,8 @@
+"0","# --- PLOT LUNG CANCER PREVALENCE BY AGE GROUP"
+"0","ggplot(data=age_group_pct, aes(x=AGE_GROUP, y=Count, fill=LUNG_CANCER)) +"
+"0","  geom_col(position = ""dodge"") +"
+"0","  scale_fill_manual(values=c(""No"" = ""steelblue"", ""Yes"" = ""#ED7D31"")) +"
+"0","  labs(title = ""Prevalence of Lung Cancer by Age Group"","
+"0","       subtitle = ""Based on matched sample, non-representative of population"","
+"0","       x = ""Age Group"", y = ""Count"", fill = ""Lung Cancer?"") +"
+"0","  theme_minimal()"

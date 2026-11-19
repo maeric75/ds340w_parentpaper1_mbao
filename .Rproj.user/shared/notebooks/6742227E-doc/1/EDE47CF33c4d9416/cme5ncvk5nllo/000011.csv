@@ -1,0 +1,5 @@
+"0",""
+"0","# Add remaining models"
+"0","for (i in 2:length(models)) {"
+"0","  plot(models[[i]], col = colors[i], lwd = 2, add = TRUE)"
+"0","}"
