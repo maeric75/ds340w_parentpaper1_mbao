@@ -3,9 +3,9 @@
     "path": "~/GitHub/ds340w_parentpaper1_mbao/doc.Rmd",
     "project_path": "doc.Rmd",
     "type": "r_markdown",
-    "hash": "0",
+    "hash": "3168730566",
     "contents": "",
-    "dirty": true,
+    "dirty": false,
     "created": 1788365943368.0,
     "source_on_save": false,
     "relative_order": 3,
@@ -17,11 +17,11 @@
         "scrollLine": "90"
     },
     "folds": "",
-    "lastKnownWriteTime": 1794962245,
+    "lastKnownWriteTime": 1795115249,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1794966307532,
+    "last_content_update": 1795115249885,
     "read_only": false,
     "read_only_alternatives": []
 }
